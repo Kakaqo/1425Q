@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Command Q の 保管庫</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Hiragino Mincho ProN", serif;
+      background: #0f0f0f;
+      color: #eee;
+      overflow-x: hidden;
+    }
+
+    header {
+      position: fixed;
+      width: 100%;
+      top: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px);
+      padding: 15px 30px;
+      z-index: 100;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 2px;
+    }
+
+    /* 横スライド */
+    .slider {
+      position: relative;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .slides {
+      display: flex;
+      transition: transform 0.6s ease;
+    }
+
+    .slide {
+      min-width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      color: white;
+      position: relative;
+    }
+
+    .slide::after {
+      content: "";
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+    }
+
+    .slide h2 {
+      position: relative;
+      z-index: 2;
+      font-weight: 300;
+      letter-spacing: 3px;
+    }
+
+    .slide:nth-child(1) { background: url('https://picsum.photos/1600/900?1') center/cover; }
+    .slide:nth-child(2) { background: url('https://picsum.photos/1600/900?2') center/cover; }
+    .slide:nth-child(3) { background: url('https://picsum.photos/1600/900?3') center/cover; }
+
+    /* ドットナビ */
+    .dots {
+      position: absolute;
+      bottom: 30px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      z-index: 5;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.5);
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .dot.active {
+      background: #fff;
+      transform: scale(1.3);
+    }
+
+    section {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: all 1s ease;
+      padding: 100px 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    section.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .section-title {
+      font-size: 26px;
+      margin-bottom: 30px;
+      border-left: 3px solid #caa46a;
+      padding-left: 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 25px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      backdrop-filter: blur(4px);
+      transition: transform 0.3s;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+    }
+
+    .card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+    }
+
+    .card-content {
+      padding: 15px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 50px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>あなたの心のハウス</h1>
+</header>
+
+<div class="slider">
+  <div class="slides" id="slides">
+    <div class="slide"><h2>心安らぐひとときを独りで</h2></div>
+    <div class="slide"><h2>美しき残酷な世界</h2></div>
+    <div class="slide"><h2>滅びの友情と凍てついた願い</h2></div>
+  </div>
+  <div class="dots" id="dots"></div>
+</div>
+
+<section>
+  <div class="section-title">当館について</div>
+  <p>正しい睡眠と食事と運動がとても大事です( ˘ω˘)</p>
+</section>
+
+<section>
+  <div class="section-title">料亭　玄右衛門</div>
+  <div class="grid">
+    <div class="card">
+      <img src="https://picsum.photos/400/300?room1">
+      <div class="card-content">
+        <h3>和室</h3>
+        <p>畳の焦げた香りに包まれる落ち着いた空間。</p>
+      </div>
+    </div>
+    <div class="card">
+      <img src="https://picsum.photos/400/300?room2">
+      <div class="card-content">
+        <h3>突貫工事の倉庫</h3>
+        <p>先の視えない現実は暗黒世界…せめて此処では心にゆとりを🌸</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-title">悪の温泉</div>
+  <div class="grid">
+    <div class="card">
+      <img src="https://picsum.photos/400/300?onsen1">
+      <div class="card-content">
+        <h3>風呂場</h3>
+        <p>お帰りください</p>
+      </div>
+    </div>
+    <div class="card">
+      <img src="https://picsum.photos/400/300?onsen2">
+      <div class="card-content">
+        <h3>天風</h3>
+        <p>　なにもありません。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>© 2026 Q企画</p>
+</footer>
+
+<script>
+  const slides = document.getElementById('slides');
+  const dotsContainer = document.getElementById('dots');
+  const total = slides.children.length;
+  let index = 0;
+
+  // ドット生成
+  for (let i = 0; i < total; i++) {
+    const dot = document.createElement('div');
+    dot.classList.add('dot');
+    if (i === 0) dot.classList.add('active');
+    dot.addEventListener('click', () => moveTo(i));
+    dotsContainer.appendChild(dot);
+  }
+
+  function updateDots() {
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i === index);
+    });
+  }
+
+  function moveTo(i) {
+    index = i;
+    slides.style.transform = `translateX(-${i * 100}vw)`;
+    updateDots();
+  }
+
+  // フェードイン
+  const sections = document.querySelectorAll('section');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.2 });
+
+  sections.forEach(sec => observer.observe(sec));
+</script>
+
+</body>
+</html>
