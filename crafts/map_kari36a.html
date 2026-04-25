@@ -263,6 +263,29 @@ let isMultiTouch=false,pinchStartDist=0,pinchStartScale=1;
 let pinchPanStart={x:0,y:0},pinchScrollStart={x:0,y:0};
 let mobilePreviewR=-1,mobilePreviewC=-1;
 
+/* --- <script> タグ内の冒頭、変数定義の後あたりに追加 --- */
+
+// モバイル版のみ、トップパネル等でのピンチズーム（ズームイン・アウト）を無効化
+if (IS_TOUCH) {
+  document.addEventListener('touchstart', function (e) {
+    // 2本指以上の操作かつ、ターゲットが grid-area 内でない場合
+    if (e.touches.length > 1 && !e.target.closest('#grid-area')) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  // ダブルタップによるズームも防止
+  document.addEventListener('touchend', function (e) {
+    if (!e.target.closest('#grid-area')) {
+      const now = (new Date()).getTime();
+      if (now - (window.lastTouchEnd || 0) <= 300) {
+        e.preventDefault();
+      }
+      window.lastTouchEnd = now;
+    }
+  }, { passive: false });
+}
+
 function clampScale(s){return Math.min(SCALE_MAX,Math.max(SCALE_MIN,Math.round(s*100)/100));}
 function applyScale(s){scale=clampScale(s);document.getElementById('grid-wrap').style.transform=`scale(${scale})`;}
 function touchDist(a,b){return Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);}
