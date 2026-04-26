@@ -1,4 +1,5 @@
-ver3.3411
+ver 3.3412
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
@@ -52,7 +53,8 @@ body,#app{font-family:var(--font-sans);background:#fff}
   .tile-btn, 
   .row button, 
   .row select, 
-  .row input[type=number], 
+  .row input[type=number],
+  .row input[type=text],
   .row label,
   #status {
     font-size: 16px !important; 
@@ -237,13 +239,13 @@ body,#app{font-family:var(--font-sans);background:#fff}
 </div>
 <script>
 const CELL=30,BASE_CELLS=3,TAP_DIST=12;
-// ズーム範囲: 0.5〜1
-const SCALE_MIN=0.5,SCALE_MAX=1.0,SCALE_STEP=0.05;
+const IS_TOUCH=navigator.maxTouchPoints>0||'ontouchstart' in window;
+// ズーム範囲: PC=0.5〜1、モバイル=0.8〜2.0
+const SCALE_MIN=IS_TOUCH?0.8:0.5,SCALE_MAX=IS_TOUCH?2.0:1.0,SCALE_STEP=0.05;
 const BASE_COLORS={blue:'#1a6fd4',purple:'#7c3aed',red:'#dc2626',pink:'#db2777',yellow:'#d97706',gray:'#6b7280',black:'#111111'};
 const OBJ_COLORS={green:'#22aa44',orange:'#f97316',red:'#dc2626',brown:'#92400e',beige:'#d4b483',black:'#111111'};
 const EFFECT_OTHER_COLORS={red:'#ef4444',blue:'#3b82f6',black:'#111111'};
 const CONT_COLOR='#5c3317';
-const IS_TOUCH=navigator.maxTouchPoints>0||'ontouchstart' in window;
 
 let cols=30,rows=30,scale=1,idCounter=0,tbIdCounter=0;
 let mode='block90',effectSubMode='contaminated',objSubMode='objblock';
