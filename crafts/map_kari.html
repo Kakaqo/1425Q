@@ -1,8 +1,13 @@
-ver 3.3418
-
+ver 3.3605
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- =========================
+  マップエディタ本体（FIX-1〜3適用版）
+  FIX-1: テキストボックス選択/ズーム干渉・選択解除後の誤作成を抑制
+  FIX-2: 基地ブロック整列配置のクリック/タップ導線を補強
+  FIX-3: 設置不可能タイルが置いて即消える問題を抑制
+========================= -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body,#app{font-family:var(--font-sans);background:#fff}
@@ -37,6 +42,12 @@ body,#app{font-family:var(--font-sans);background:#fff}
 #grid-area{flex:1;overflow:auto;position:relative;background:#f0f0f0;touch-action:none}
 #grid-wrap{position:relative;transform-origin:0 0;background:#fff;display:inline-block}
 #status{font-size:11px;color:var(--color-text-secondary);min-height:13px}
+.role-badge{position:absolute;left:2px;bottom:2px;font-size:9px;line-height:1;padding:2px 4px;border-radius:4px;background:rgba(255,255,255,0.92);color:#111;border:1px solid rgba(0,0,0,0.25);z-index:5;pointer-events:none;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
+#legend-panel{position:absolute;top:8px;right:8px;z-index:60;background:rgba(255,255,255,0.95);border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;min-width:170px;max-width:240px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11px}
+.legend-title{font-weight:700;color:#111;margin-bottom:4px}
+.legend-item{display:flex;align-items:center;gap:6px;margin:2px 0}
+.legend-swatch{width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,0.3);flex-shrink:0}
+.legend-name{color:#222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tb-el{position:absolute;box-sizing:border-box;user-select:none;overflow:hidden}
 .tb-el.selected{outline:2px solid #a855f7;outline-offset:1px}
 .tb-handle{position:absolute;width:10px;height:10px;background:#a855f7;border:1.5px solid #fff;border-radius:2px;z-index:35;cursor:pointer}
@@ -83,6 +94,14 @@ body,#app{font-family:var(--font-sans);background:#fff}
     min-height: unset !important;
   }
 
+  /* 移動モードはモバイルのみ表示 */
+  #tb-move-mode-label {
+    display: flex !important;
+    align-items: center;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
   /* アプリ全体のスクロールを禁止し、マップ位置を固定する準備 */
   body, #app {
     overflow: hidden;
@@ -93,6 +112,9 @@ body,#app{font-family:var(--font-sans);background:#fff}
 }
 </style>
 <div id="app">
+<!-- =========================
+  上部操作パネル
+========================= -->
 <div id="top-panel">
   <div class="toolbar" id="palette"></div>
   <div class="row">
@@ -103,6 +125,9 @@ body,#app{font-family:var(--font-sans);background:#fff}
   <div class="row subpanel" id="base-sub">
     <select id="base-color" onchange="syncBaseUI()"><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black" selected>黒</option><option value="custom">その他...</option></select>
     <input type="color" id="base-custom" value="#3a7bd5" style="display:none">
+    <input type="text" id="alliance-name" placeholder="Alliance name (EN)" style="padding:4px 8px;font-size:11px;border-radius:var(--border-radius-md);border:.5px solid var(--color-border-secondary);width:160px">
+    <button onclick="applyAllianceName()">連盟名を保存</button>
+    <select id="base-role"><option value="">役割なし</option><option value="盟主">盟主</option><option value="戦神">戦神</option><option value="女神">女神</option><option value="執事">執事</option><option value="理事">理事</option></select>
     <label><input type="checkbox" id="barrier-check"> バリア</label>
     <button onclick="toggleArrPanel()" style="background:#e0f0ff;border-color:#93c5fd">⊞ 整列配置▾</button>
   </div>
@@ -143,7 +168,8 @@ body,#app{font-family:var(--font-sans);background:#fff}
   <!-- TB sub: 縦書き選択を廃止 -->
   <div class="row subpanel" id="tb-sub">
     <span style="font-size:11px;font-weight:500;color:#7c3aed">テキストボックス:</span>
-    <span style="font-size:11px;color:#999">ドラッグで追加 | クリック:選択 | 選択後クリック:編集</span>
+    <span style="font-size:11px;color:#999">ドラッグで追加 | クリック:選択 | 選択後クリック:編集（移動モードONでドラッグ移動）</span>
+    <label id="tb-move-mode-label" style="display:none"><input type="checkbox" id="tb-move-mode"> 移動モード</label>
     <input type="number" id="tb-fsize" min="3" max="180" value="14" style="width:48px">px
     <label><input type="checkbox" id="tb-bold"> 太字</label>
     <select id="tb-fcolor" onchange="syncTbFColorUI()"><option value="#000000">黒</option><option value="#ff0000">赤</option><option value="#0000ff">青</option><option value="custom">その他...</option></select>
@@ -164,6 +190,8 @@ body,#app{font-family:var(--font-sans);background:#fff}
     <select id="bind-color" onchange="applyBindColor()"><option value="">色変更...</option><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black">黒</option><option value="green">緑</option><option value="orange">オレンジ</option><option value="custom">その他...</option></select>
     <input type="color" id="bind-color-custom" value="#3a7bd5" style="display:none" onchange="applyBindColorCustom()">
     <label><input type="checkbox" id="bind-barrier" onchange="applyBindBarrier()"> バリア</label>
+    <select id="bind-role"><option value="">役割なし</option><option value="盟主">盟主</option><option value="戦神">戦神</option><option value="女神">女神</option><option value="執事">執事</option><option value="理事">理事</option></select>
+    <button onclick="applyBindRole()">役割適用</button>
     <button onclick="toggleBindText()">テキスト▾</button>
     <button onclick="toggleBindHighlight()">強調▾</button>
     <button onclick="startRelocate()">再配置</button>
@@ -200,6 +228,7 @@ body,#app{font-family:var(--font-sans);background:#fff}
   <div id="io-panel">
     <div class="row">
       <span style="font-size:11px;font-weight:500">ファイルに出力:</span>
+      <label><input type="checkbox" id="export-with-legend" checked> 凡例を含める</label>
       <button onclick="exportPNG()">PNGで保存</button>
       <button onclick="exportJPG()">JPGで保存</button>
       <button onclick="exportCSV()">CSVで保存</button>
@@ -242,15 +271,23 @@ body,#app{font-family:var(--font-sans);background:#fff}
     <button onclick="applyAlignInSelection()">整列実行</button>
   </div>
   <div id="status"></div>
+  <div class="row"><button id="btn-legend-toggle" onclick="toggleLegend()">凡例: ON</button></div>
 </div>
-<div id="grid-area"><div id="grid-wrap"></div></div>
+<!-- =========================
+  マップ表示エリア
+========================= -->
+<div id="grid-area"><div id="legend-panel"></div><div id="grid-wrap"></div></div>
 </div>
+<!-- =========================
+  JavaScript: 状態管理・描画・操作処理
+========================= -->
 <script>
 const CELL=30,BASE_CELLS=3,TAP_DIST=12;
 const IS_TOUCH=navigator.maxTouchPoints>0||'ontouchstart' in window;
 // ズーム範囲: PC=0.5〜1、モバイル=0.8〜2.0
 const SCALE_MIN=IS_TOUCH?0.6:0.5,SCALE_MAX=IS_TOUCH?1.5:1.0,SCALE_STEP=0.05;
 const BASE_COLORS={blue:'#1a6fd4',purple:'#7c3aed',red:'#dc2626',pink:'#db2777',yellow:'#d97706',gray:'#6b7280',black:'#111111'};
+const BASE_ROLES=['盟主','戦神','女神','執事','理事'];
 const OBJ_COLORS={green:'#22aa44',orange:'#f97316',red:'#dc2626',brown:'#92400e',beige:'#d4b483',black:'#111111'};
 const EFFECT_OTHER_COLORS={red:'#ef4444',blue:'#3b82f6',black:'#111111'};
 const CONT_COLOR='#5c3317';
@@ -272,9 +309,16 @@ let arrangeDragging=false,arrangeAnchorR=-1,arrangeAnchorC=-1,arrangeActive=fals
 let effectVisible=true,bindSelected=new Set();
 let isRelocating=false,relocateOffsets=[],relocateAnchorR=-1,relocateAnchorC=-1;
 let selectedTbId=null,tbNewDrag=false,tbNewStart=null,tbPinching=false;
+// FIX-1: テキストボックス選択解除直後のタップを「新規作成」と誤判定しないための抑止フラグ
+let ignoreNextTextboxCreate=false;
+// FIX-3: 設置不可能タイルの設置直後に消去処理が連続発火するのを防ぐクールダウン
+let justPlacedBlockedUntil=0;
 let isMultiTouch=false,pinchStartDist=0,pinchStartScale=1;
 let pinchPanStart={x:0,y:0},pinchScrollStart={x:0,y:0};
 let mobilePreviewR=-1,mobilePreviewC=-1;
+let legendVisible=true;
+let tbMoveDragState=null;
+const allianceNameMap={blue:'Blue Alliance',purple:'Purple Alliance',red:'Red Alliance',pink:'Pink Alliance',yellow:'Yellow Alliance',gray:'Gray Alliance',black:'Black Alliance'};
 
 /* --- <script> タグ内の冒頭、変数定義の後あたりに追加 --- */
 
@@ -314,6 +358,8 @@ function redo(){if(historyIdx>=history.length-1)return;historyIdx++;applyHistory
 function applyHistory(){const d=JSON.parse(history[historyIdx]);if(d.rows)rows=d.rows;if(d.cols)cols=d.cols;document.getElementById('rows-in').value=rows;document.getElementById('cols-in').value=cols;grid=d.grid;regionGrid=d.regionGrid;blocks=d.blocks;textboxes=d.textboxes||[];renderAll();}
 function updateUR(){document.getElementById('btn-undo').disabled=historyIdx<=0;document.getElementById('btn-redo').disabled=historyIdx>=history.length-1;}
 function getBaseColor(){const v=document.getElementById('base-color').value;return v==='custom'?document.getElementById('base-custom').value:BASE_COLORS[v]||'#111';}
+function getBaseColorKey(){return document.getElementById('base-color').value;}
+function getCurrentAllianceName(){const key=getBaseColorKey();if(key==='custom'){const hex=document.getElementById('base-custom').value.toLowerCase();return allianceNameMap[hex]||'Custom Alliance';}return allianceNameMap[key]||'';}
 function getObjColor(){const v=document.getElementById('obj-color').value;return v==='custom'?document.getElementById('obj-custom').value:OBJ_COLORS[v]||'#22aa44';}
 function getObjSize(){return readIntField('obj-size',5);}
 function getContSize(){const v=document.getElementById('cont-size').value;return v==='custom'?readIntField('cont-custom',7):parseInt(v)||1;}
@@ -321,7 +367,9 @@ function getEffectOtherSize(){return readIntField('effectother-size',1);}
 function getEffectOtherColor(){const v=document.getElementById('effectother-color').value;return v==='custom'?document.getElementById('effectother-custom').value:EFFECT_OTHER_COLORS[v]||'#ef4444';}
 function getArrColor(){const v=document.getElementById('arr-color').value;return v==='custom'?document.getElementById('arr-custom').value:BASE_COLORS[v]||'#111';}
 function getArrParams(){return{nrows:Math.min(100,Math.max(1,readIntField('arr-rows',3))),ncols:Math.min(100,Math.max(1,readIntField('arr-cols',3))),gapR:Math.min(10,Math.max(0,readIntField('arr-gap-r',1))),gapC:Math.min(10,Math.max(0,readIntField('arr-gap-c',1))),color:getArrColor(),barrier:document.getElementById('arr-barrier').checked};}
-function syncBaseUI(){document.getElementById('base-custom').style.display=document.getElementById('base-color').value==='custom'?'inline-block':'none';renderPalette();}
+function syncBaseUI(){const key=document.getElementById('base-color').value;document.getElementById('base-custom').style.display=key==='custom'?'inline-block':'none';document.getElementById('alliance-name').value=getCurrentAllianceName();renderPalette();refreshLegendPanel();}
+function applyAllianceName(){const key=getBaseColorKey();const input=document.getElementById('alliance-name');const val=(input.value||'').trim();if(!val){setStatus('連盟名(英語)を入力してください');return;}if(key==='custom'){const hex=document.getElementById('base-custom').value.toLowerCase();allianceNameMap[hex]=val;}else allianceNameMap[key]=val;refreshLegendPanel();setStatus('連盟名を保存しました');}
+function toggleLegend(){legendVisible=!legendVisible;const btn=document.getElementById('btn-legend-toggle');if(btn)btn.textContent=`凡例: ${legendVisible?'ON':'OFF'}`;refreshLegendPanel();}
 function syncObjUI(){document.getElementById('obj-custom').style.display=document.getElementById('obj-color').value==='custom'?'inline-block':'none';renderPalette();}
 function syncContUI(){document.getElementById('cont-custom').style.display=document.getElementById('cont-size').value==='custom'?'inline-block':'none';}
 function syncArrColorUI(){document.getElementById('arr-custom').style.display=document.getElementById('arr-color').value==='custom'?'inline-block':'none';}
@@ -371,7 +419,7 @@ function drawTbOnCanvas(ctx,tb){
   lines.forEach(line=>{ctx.fillText(line,x+w/2,ty);ty+=lH;});
 }
 
-function buildMapCanvas(){
+function buildMapCanvas(withLegend=false){
   const W=cols*CELL,H=rows*CELL;const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
   if(effectVisible){for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){if(isBlockCell(r,c))continue;const t=grid[r][c];const cx=c*CELL,cy=r*CELL;if(t==='blocked'){ctx.fillStyle='#888';ctx.fillRect(cx,cy,CELL,CELL);}else if(t==='contaminated')canvasDrawContam(ctx,cx,cy,CELL,CELL);else if(isEffectOtherTile(t))canvasDrawEO(ctx,cx,cy,CELL,CELL,effectOtherTileColor(t));}}else{for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){if(grid[r][c]==='blocked'&&!isBlockCell(r,c)){ctx.fillStyle='#888';ctx.fillRect(c*CELL,r*CELL,CELL,CELL);}}}
   if(regionVisible){for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){if(isBlockCell(r,c))continue;const cell=regionGrid[r][c];if(!cell)continue;ctx.fillStyle=hexAlpha(cell.hex,cell.alpha);ctx.fillRect(c*CELL,r*CELL,CELL,CELL);}}
@@ -381,10 +429,12 @@ function buildMapCanvas(){
   if(regionVisible){blocks.forEach(blk=>{for(let dr=0;dr<blk.cells;dr++) for(let dc=0;dc<blk.cells;dc++){const r=blk.r+dr,c=blk.c+dc;const cell=regionGrid[r]?.[c];if(!cell)continue;ctx.fillStyle=hexAlpha(cell.hex,cell.alpha);ctx.fillRect(c*CELL,r*CELL,CELL,CELL);}});}
   if(effectVisible){blocks.forEach(blk=>{for(let dr=0;dr<blk.cells;dr++) for(let dc=0;dc<blk.cells;dc++){const r=blk.r+dr,c=blk.c+dc;const t=grid[r]?.[c];const cx=c*CELL,cy=r*CELL;if(t==='contaminated')canvasDrawContam(ctx,cx,cy,CELL,CELL);else if(isEffectOtherTile(t))canvasDrawEO(ctx,cx,cy,CELL,CELL,effectOtherTileColor(t));}});}
   if(tbVisible){textboxes.forEach(tb=>drawTbOnCanvas(ctx,tb));}
+  if(withLegend){drawLegendOnCanvas(ctx);}
   return canvas;
 }
-function exportPNG(){buildMapCanvas().toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='map.png';a.click();setStatus('PNGを保存しました');},'image/png');}
-function exportJPG(){buildMapCanvas().toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='map.jpg';a.click();setStatus('JPGを保存しました');},'image/jpeg',0.92);}
+function drawLegendOnCanvas(ctx){const entries=[];const used=new Set();blocks.filter(b=>b.type==='base').forEach(b=>{const key=(b.colorKey||b.color||'').toLowerCase();if(used.has(key))return;used.add(key);entries.push({color:b.color||'#111',name:b.allianceName||allianceNameMap[key]||'Unknown Alliance'});});Object.keys(BASE_COLORS).forEach(k=>{if(used.has(k))return;entries.push({color:BASE_COLORS[k],name:allianceNameMap[k]||`${k} Alliance`});});const pad=8,rowH=14,w=220,h=pad*2+16+entries.length*rowH;const x=Math.max(6,cols*CELL-w-8),y=8;ctx.save();ctx.fillStyle='rgba(255,255,255,0.95)';ctx.strokeStyle='rgba(0,0,0,0.25)';ctx.lineWidth=1;ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);ctx.fillStyle='#111';ctx.font='bold 12px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText('Alliance Legend',x+pad,y+pad-2);ctx.font='11px sans-serif';entries.forEach((e,i)=>{const ry=y+pad+16+i*rowH;ctx.fillStyle=e.color;ctx.fillRect(x+pad,ry+1,12,12);ctx.strokeStyle='rgba(0,0,0,0.35)';ctx.strokeRect(x+pad,ry+1,12,12);ctx.fillStyle='#222';ctx.fillText(e.name,x+pad+18,ry+1);});ctx.restore();}
+function exportPNG(){const withLegend=!!document.getElementById('export-with-legend')?.checked;buildMapCanvas(withLegend).toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='map.png';a.click();setStatus('PNGを保存しました');},'image/png');}
+function exportJPG(){const withLegend=!!document.getElementById('export-with-legend')?.checked;buildMapCanvas(withLegend).toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='map.jpg';a.click();setStatus('JPGを保存しました');},'image/jpeg',0.92);}
 
 function getRegionColor(){const v=document.getElementById('region-color-sel').value;return v==='custom'?document.getElementById('region-color-custom').value:v;}
 function applyRegionColor(){if(!selCells.size){setStatus('範囲を選択してください');return;}const hex=getRegionColor();const alpha=parseInt(document.getElementById('region-alpha').value)/100;selCells.forEach(k=>{const[r,c]=k.split(',').map(Number);regionGrid[r][c]={hex,alpha};});saveHistory();setStatus('領域を色付けしました');renderAll();}
@@ -421,11 +471,37 @@ function renderTextboxes(){
   });
 }
 function getWrapXY(e){const rect=document.getElementById('grid-wrap').getBoundingClientRect();return{px:(e.clientX-rect.left)/scale,py:(e.clientY-rect.top)/scale};}
+function startTbMoveDrag(clientX,clientY){
+  if(mode!=='textbox'||!selectedTbId||!document.getElementById('tb-move-mode')?.checked)return false;
+  const tb=textboxes.find(t=>t.id===selectedTbId);
+  if(!tb)return false;
+  const rect=document.getElementById('grid-wrap').getBoundingClientRect();
+  const px=(clientX-rect.left)/scale,py=(clientY-rect.top)/scale;
+  if(!(px>=tb.c*CELL&&px<=(tb.c+tb.w)*CELL&&py>=tb.r*CELL&&py<=(tb.r+tb.h)*CELL))return false;
+  tbMoveDragState={id:tb.id,offX:px-tb.c*CELL,offY:py-tb.r*CELL,moved:false};
+  return true;
+}
+function moveTbDrag(clientX,clientY){
+  if(!tbMoveDragState)return;
+  const tb=textboxes.find(t=>t.id===tbMoveDragState.id);
+  if(!tb)return;
+  const rect=document.getElementById('grid-wrap').getBoundingClientRect();
+  const px=(clientX-rect.left)/scale,py=(clientY-rect.top)/scale;
+  const nc=Math.max(0,Math.min(cols-tb.w,Math.round((px-tbMoveDragState.offX)/CELL)));
+  const nr=Math.max(0,Math.min(rows-tb.h,Math.round((py-tbMoveDragState.offY)/CELL)));
+  if(tb.c!==nc||tb.r!==nr){tb.c=nc;tb.r=nr;tbMoveDragState.moved=true;renderAll();}
+}
+function endTbMoveDrag(){
+  if(!tbMoveDragState)return;
+  if(tbMoveDragState.moved)saveHistory();
+  tbMoveDragState=null;
+}
 function startTbResize(e,tb,handle){const{px,py}=getWrapXY(e);const origR=tb.r,origC=tb.c,origW=tb.w,origH=tb.h,sx=px,sy=py;function onMove(ev){const{px:ex,py:ey}=getWrapXY(ev);const dc=Math.round((ex-sx)/CELL),dr=Math.round((ey-sy)/CELL);let nr=origR,nc=origC,nw=origW,nh=origH;if(handle.includes('r'))nw=Math.max(1,origW+dc);if(handle.includes('l')){nc=origC+dc;nw=Math.max(1,origW-dc);}if(handle.includes('b'))nh=Math.max(1,origH+dr);if(handle.includes('t')){nr=origR+dr;nh=Math.max(1,origH-dr);}tb.r=Math.max(0,Math.min(rows-1,nr));tb.c=Math.max(0,Math.min(cols-1,nc));tb.w=Math.min(cols-tb.c,nw);tb.h=Math.min(rows-tb.r,nh);renderAll();}function onUp(){saveHistory();renderAll();document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);}
 function startTbResizeTouch(e,tb,handle){const t=e.touches[0];const rect=document.getElementById('grid-wrap').getBoundingClientRect();const px=(t.clientX-rect.left)/scale,py=(t.clientY-rect.top)/scale;const origR=tb.r,origC=tb.c,origW=tb.w,origH=tb.h,sx=px,sy=py;function onMove(ev){if(isMultiTouch)return;ev.preventDefault();const t2=ev.touches[0];const r2=document.getElementById('grid-wrap').getBoundingClientRect();const ex=(t2.clientX-r2.left)/scale,ey=(t2.clientY-r2.top)/scale;const dc=Math.round((ex-sx)/CELL),dr=Math.round((ey-sy)/CELL);let nr=origR,nc=origC,nw=origW,nh=origH;if(handle.includes('r'))nw=Math.max(1,origW+dc);if(handle.includes('l')){nc=origC+dc;nw=Math.max(1,origW-dc);}if(handle.includes('b'))nh=Math.max(1,origH+dr);if(handle.includes('t')){nr=origR+dr;nh=Math.max(1,origH-dr);}tb.r=Math.max(0,Math.min(rows-1,nr));tb.c=Math.max(0,Math.min(cols-1,nc));tb.w=Math.min(cols-tb.c,nw);tb.h=Math.min(rows-tb.r,nh);renderAll();}function onUp(){saveHistory();renderAll();document.removeEventListener('touchmove',onMove);document.removeEventListener('touchend',onUp);}document.addEventListener('touchmove',onMove,{passive:false});document.addEventListener('touchend',onUp);}
 function applyBindColor(){const v=document.getElementById('bind-color').value;if(!v)return;document.getElementById('bind-color-custom').style.display=v==='custom'?'inline-block':'none';if(v==='custom')return;const allColors={...BASE_COLORS,...OBJ_COLORS};const col=allColors[v]||v;bindSelected.forEach(id=>{const b=blocks.find(x=>x.id===id);if(b)b.color=col;});saveHistory();renderAll();document.getElementById('bind-color').value='';}
 function applyBindColorCustom(){const col=document.getElementById('bind-color-custom').value;bindSelected.forEach(id=>{const b=blocks.find(x=>x.id===id);if(b)b.color=col;});saveHistory();renderAll();}
 function applyBindBarrier(){const on=document.getElementById('bind-barrier').checked;bindSelected.forEach(id=>{const b=blocks.find(x=>x.id===id);if(b)b.barrier=on;});saveHistory();renderAll();}
+function applyBindRole(){const role=document.getElementById('bind-role').value;bindSelected.forEach(id=>{const b=blocks.find(x=>x.id===id);if(!b||b.type!=='base')return;if(role){b.role=role;b.textLabel={txt:role,sz:14,col:'#000000',bg:'#ffffff'};}else{delete b.role;if(b.textLabel&&BASE_ROLES.includes(b.textLabel.txt))delete b.textLabel;}});saveHistory();renderAll();}
 function toggleBindText(){const el=document.getElementById('bind-text-sub');el.style.display=el.style.display==='none'?'flex':'none';}
 function toggleBindHighlight(){const el=document.getElementById('bind-highlight-sub');el.style.display=el.style.display==='none'?'flex':'none';}
 function applyBindText(){const txt=document.getElementById('bind-text-val').value;const sz=readIntField('bind-text-size',14);const cval=document.getElementById('bind-text-color').value;const col=cval==='custom'?document.getElementById('bind-text-color-custom').value:cval;const bgval=document.getElementById('bind-text-bg').value;const bg=bgval==='custom'?document.getElementById('bind-text-bg-custom').value:bgval;bindSelected.forEach(id=>{const b=blocks.find(x=>x.id===id);if(b)b.textLabel={txt,sz,col,bg};});saveHistory();renderAll();}
@@ -436,11 +512,11 @@ function cancelRelocate(){isRelocating=false;relocateOffsets=[];relocateAnchorR=
 function applyRelocate(tr,tc){const selIds=new Set(relocateOffsets.map(o=>o.id));for(const o of relocateOffsets){const nr=tr+o.dr,nc=tc+o.dc;const b=blocks.find(x=>x.id===o.id);if(!b)continue;if(nr<0||nc<0||nr+b.cells>rows||nc+b.cells>cols){setStatus('範囲外に置けません');return;}for(let dr=0;dr<b.cells;dr++) for(let dc=0;dc<b.cells;dc++){if(grid[nr+dr]?.[nc+dc]==='blocked'){setStatus('設置不可エリアと重なります');return;}if(blocks.some(x=>!selIds.has(x.id)&&blockOccupies(x,nr+dr,nc+dc))){setStatus('他のブロックと重なります');return;}}}relocateOffsets.forEach(o=>{const b=blocks.find(x=>x.id===o.id);if(b){b.r=tr+o.dr;b.c=tc+o.dc;}});saveHistory();setStatus('再配置しました');isRelocating=false;relocateOffsets=[];relocateAnchorR=-1;relocateAnchorC=-1;renderAll();}
 function bindDeselectAll(){bindSelected=new Set();updateBindSub();renderAll();}
 function updateBindSub(){document.getElementById('block-ind-count').textContent=bindSelected.size+'個選択中';if(mode==='blockind')document.getElementById('block-ind-sub').style.display='flex';}
-function onBindBlockClick(blk){if(blk.type==='blocked')return;if(bindSelected.has(blk.id))bindSelected.delete(blk.id);else{bindSelected.add(blk.id);document.getElementById('bind-barrier').checked=blk.barrier||false;}updateBindSub();renderAll();}
+function onBindBlockClick(blk){if(blk.type==='blocked')return;if(bindSelected.has(blk.id))bindSelected.delete(blk.id);else{bindSelected.add(blk.id);document.getElementById('bind-barrier').checked=blk.barrier||false;document.getElementById('bind-role').value=blk.role||'';}updateBindSub();renderAll();}
 function onBindBlockRightClick(blk){if(blk.type==='blocked')return;if(bindSelected.has(blk.id))startRelocate();}
 const ALL_SUBS=['obj-sub','effect-sub','base-sub','block-ind-sub','bind-text-sub','bind-highlight-sub','tb-sub','move-sub','eraser-hint'];
 const TOOLBAR_TILES=[{id:'block90',label:'基地'},{id:'objblock_group',label:'その他オブジェクト'},{id:'effect_group',label:'効果範囲'},{id:'textbox',label:'テキストボックス'},{id:'blockind',label:'ブロックの個別設定'},{id:'select',label:'範囲を選択'},{id:'move',label:'マップ操作'},{id:'eraser',label:'消しゴム',mobileOnly:true}];
-function renderPalette(){const p=document.getElementById('palette');p.innerHTML='';TOOLBAR_TILES.forEach(t=>{if(t.mobileOnly&&!IS_TOUCH)return;let active=activeSubBtn===t.id;const b=document.createElement('div');b.className='tile-btn'+(active?' active':'');let sw='';if(t.id==='block90')sw=`<span class="swatch" style="background:${getBaseColor()};border:1px solid #000"></span>`;else if(t.id==='objblock_group')sw=`<span class="swatch" style="background:${getObjColor()};border:1px solid #333"></span>`;else if(t.id==='effect_group')sw=`<svg width="12" height="12" style="flex-shrink:0"><circle cx="6" cy="6" r="5" fill="none" stroke="#f97316" stroke-width="2"/><circle cx="6" cy="6" r="2" fill="#f97316"/></svg>`;else if(t.id==='textbox')sw=`<svg width="12" height="12" style="flex-shrink:0"><rect x="1" y="2" width="10" height="8" fill="none" stroke="#7c3aed" stroke-width="1.5"/><line x1="3" y1="5" x2="9" y2="5" stroke="#7c3aed" stroke-width="1"/></svg>`;else if(t.id==='blockind')sw=`<svg width="12" height="12" style="flex-shrink:0"><rect x="1" y="1" width="10" height="10" fill="none" stroke="#059669" stroke-width="2"/><circle cx="6" cy="6" r="2" fill="#059669"/></svg>`;else if(t.id==='select')sw=`<span class="swatch" style="background:#fff;border:2px dashed #2563eb"></span>`;else if(t.id==='eraser')sw=`<svg width="12" height="12" style="flex-shrink:0"><rect x="1" y="4" width="10" height="6" rx="1" fill="#ef4444" opacity="0.8"/><line x1="3" y1="4" x2="9" y2="4" stroke="#b91c1c" stroke-width="1.5"/></svg>`;else sw=`<span class="swatch" style="background:linear-gradient(135deg,#6a9fd8 50%,#b0c4de 50%);border:1px solid #888"></span>`;b.innerHTML=sw+t.label;b.onclick=()=>{clearMobilePreview();if(t.id!=='select')clearSelection();ALL_SUBS.forEach(id=>document.getElementById(id).style.display='none');document.getElementById('arr-panel').style.display='none';/* 同じボタンを再度押したらサブを閉じてトグル */if(activeSubBtn===t.id){activeSubBtn=null;previewR=-1;previewC=-1;renderAll();return;}if(t.id==='block90'){mode='block90';activeSubBtn='block90';document.getElementById('base-sub').style.display='flex';}else if(t.id==='objblock_group'){mode=objSubMode;activeSubBtn='objblock_group';document.getElementById('obj-sub').style.display='flex';onObjModeChange();}else if(t.id==='effect_group'){mode=effectSubMode==='contaminated'?'contaminated':'effectother';activeSubBtn='effect_group';document.getElementById('effect-sub').style.display='flex';}else if(t.id==='textbox'){mode='textbox';activeSubBtn='textbox';document.getElementById('tb-sub').style.display='flex';}else if(t.id==='blockind'){mode='blockind';activeSubBtn='blockind';document.getElementById('block-ind-sub').style.display='flex';updateBindSub();}else if(t.id==='select'){mode='select';activeSubBtn='select';}else if(t.id==='move'){mode='move';activeSubBtn='move';document.getElementById('move-sub').style.display='flex';}else if(t.id==='eraser'){mode='eraser';activeSubBtn='eraser';document.getElementById('eraser-hint').style.display='flex';}previewR=-1;previewC=-1;renderAll();};p.appendChild(b);});}
+function renderPalette(){const p=document.getElementById('palette');p.innerHTML='';TOOLBAR_TILES.forEach(t=>{if(t.mobileOnly&&!IS_TOUCH)return;let active=activeSubBtn===t.id;const b=document.createElement('div');b.className='tile-btn'+(active?' active':'');let sw='';if(t.id==='block90')sw=`<span class="swatch" style="background:${getBaseColor()};border:1px solid #000"></span>`;else if(t.id==='objblock_group')sw=`<span class="swatch" style="background:${getObjColor()};border:1px solid #333"></span>`;else if(t.id==='effect_group')sw=`<svg width="12" height="12" style="flex-shrink:0"><circle cx="6" cy="6" r="5" fill="none" stroke="#f97316" stroke-width="2"/><circle cx="6" cy="6" r="2" fill="#f97316"/></svg>`;else if(t.id==='textbox')sw=`<svg width="12" height="12" style="flex-shrink:0"><rect x="1" y="2" width="10" height="8" fill="none" stroke="#7c3aed" stroke-width="1.5"/><line x1="3" y1="5" x2="9" y2="5" stroke="#7c3aed" stroke-width="1"/></svg>`;else if(t.id==='blockind')sw=`<svg width="12" height="12" style="flex-shrink:0"><rect x="1" y="1" width="10" height="10" fill="none" stroke="#059669" stroke-width="2"/><circle cx="6" cy="6" r="2" fill="#059669"/></svg>`;else if(t.id==='select')sw=`<span class="swatch" style="background:#fff;border:2px dashed #2563eb"></span>`;else if(t.id==='eraser')sw=`<svg width="12" height="12" style="flex-shrink:0"><rect x="1" y="4" width="10" height="6" rx="1" fill="#ef4444" opacity="0.8"/><line x1="3" y1="4" x2="9" y2="4" stroke="#b91c1c" stroke-width="1.5"/></svg>`;else sw=`<span class="swatch" style="background:linear-gradient(135deg,#6a9fd8 50%,#b0c4de 50%);border:1px solid #888"></span>`;b.innerHTML=sw+t.label;b.onclick=()=>{clearMobilePreview();if(t.id!=='select')clearSelection();if(IS_TOUCH&&t.id!=='textbox'&&selectedTbId){selectedTbId=null;}ALL_SUBS.forEach(id=>document.getElementById(id).style.display='none');document.getElementById('arr-panel').style.display='none';/* 同じボタンを再度押したらサブを閉じてトグル */if(activeSubBtn===t.id){activeSubBtn=null;previewR=-1;previewC=-1;renderAll();return;}if(t.id==='block90'){mode='block90';activeSubBtn='block90';document.getElementById('base-sub').style.display='flex';}else if(t.id==='objblock_group'){mode=objSubMode;activeSubBtn='objblock_group';document.getElementById('obj-sub').style.display='flex';onObjModeChange();}else if(t.id==='effect_group'){mode=effectSubMode==='contaminated'?'contaminated':'effectother';activeSubBtn='effect_group';document.getElementById('effect-sub').style.display='flex';}else if(t.id==='textbox'){mode='textbox';activeSubBtn='textbox';document.getElementById('tb-sub').style.display='flex';}else if(t.id==='blockind'){mode='blockind';activeSubBtn='blockind';document.getElementById('block-ind-sub').style.display='flex';updateBindSub();}else if(t.id==='select'){mode='select';activeSubBtn='select';}else if(t.id==='move'){mode='move';activeSubBtn='move';document.getElementById('move-sub').style.display='flex';}else if(t.id==='eraser'){mode='eraser';activeSubBtn='eraser';document.getElementById('eraser-hint').style.display='flex';}previewR=-1;previewC=-1;renderAll();};p.appendChild(b);});}
 function blockOccupies(blk,r,c){return r>=blk.r&&r<blk.r+blk.cells&&c>=blk.c&&c<blk.c+blk.cells;}
 function isBlockCell(r,c,exId=null){return blocks.some(b=>b.id!==exId&&blockOccupies(b,r,c));}
 function canPlace(tr,tc,cells,exId=null){if(tr<0||tc<0||tr+cells>rows||tc+cells>cols)return false;for(let dr=0;dr<cells;dr++) for(let dc=0;dc<cells;dc++){if(grid[tr+dr][tc+dc]==='blocked')return false;if(isBlockCell(tr+dr,tc+dc,exId))return false;}return true;}
@@ -458,8 +534,14 @@ function floodFillEffectOther(sr,sc){const fv=effectOtherKey(getEffectOtherColor
 function makeStripePat(id,color){const pat=document.createElementNS('http://www.w3.org/2000/svg','pattern');pat.setAttribute('id',id);pat.setAttribute('width','24');pat.setAttribute('height','24');pat.setAttribute('patternUnits','userSpaceOnUse');pat.setAttribute('patternTransform','rotate(-45)');const bg=document.createElementNS('http://www.w3.org/2000/svg','rect');bg.setAttribute('width','24');bg.setAttribute('height','24');bg.setAttribute('fill',color);pat.appendChild(bg);[0,12].forEach(y=>{const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('x','0');r.setAttribute('y',y+'');r.setAttribute('width','24');r.setAttribute('height','8');r.setAttribute('fill','rgba(255,255,255,0.7)');pat.appendChild(r);});return pat;}
 function makeContPat(id){const pat=document.createElementNS('http://www.w3.org/2000/svg','pattern');pat.setAttribute('id',id);pat.setAttribute('width','10');pat.setAttribute('height','10');pat.setAttribute('patternUnits','userSpaceOnUse');[[2,2],[7,7]].forEach(([cx,cy])=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',cx+'');c.setAttribute('cy',cy+'');c.setAttribute('r','1.8');c.setAttribute('fill',CONT_COLOR);pat.appendChild(c);});return pat;}
 function makeEffectOtherPat(id,color){const pat=document.createElementNS('http://www.w3.org/2000/svg','pattern');pat.setAttribute('id',id);pat.setAttribute('width','10');pat.setAttribute('height','10');pat.setAttribute('patternUnits','userSpaceOnUse');[[2,2],[7,7],[2,7],[7,2]].forEach(([cx,cy])=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',cx+'');c.setAttribute('cy',cy+'');c.setAttribute('r','1.5');c.setAttribute('fill',color);pat.appendChild(c);});return pat;}
+function refreshLegendPanel(){const panel=document.getElementById('legend-panel');if(!panel)return;panel.style.display=legendVisible?'block':'none';if(!legendVisible)return;const used=new Map();blocks.filter(b=>b.type==='base').forEach(b=>{const key=(b.colorKey||b.color||'').toLowerCase();const name=(b.allianceName||allianceNameMap[key]||allianceNameMap[b.colorKey]||'Unknown Alliance');if(!used.has(key))used.set(key,{color:b.color,name});});Object.keys(BASE_COLORS).forEach(k=>{if(!used.has(k))used.set(k,{color:BASE_COLORS[k],name:allianceNameMap[k]||`${k} Alliance`});});panel.innerHTML='<div class="legend-title">Alliance Legend</div>';used.forEach(v=>{const row=document.createElement('div');row.className='legend-item';row.innerHTML=`<span class="legend-swatch" style="background:${v.color}"></span><span class="legend-name">${v.name||'Unknown Alliance'}</span>`;panel.appendChild(row);});}
 function renderAll(){renderPalette();const wrap=document.getElementById('grid-wrap');const W=cols*CELL,H=rows*CELL;wrap.style.width=W+'px';wrap.style.height=H+'px';wrap.innerHTML='';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('width',W);svg.setAttribute('height',H);svg.style.cssText='position:absolute;top:0;left:0;pointer-events:none;z-index:0';const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');defs.appendChild(makeContPat('dp-cont'));const eoColors=new Set();if(effectVisible){for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){const t=grid[r][c];if(isEffectOtherTile(t))eoColors.add(effectOtherTileColor(t));}}eoColors.forEach(col=>defs.appendChild(makeEffectOtherPat('dp-eo-'+col.replace('#',''),col)));svg.appendChild(defs);for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){const t=grid[r][c];if(t==='floor')continue;if((t==='contaminated'||isEffectOtherTile(t))&&!effectVisible)continue;if(isGapTile(t))continue;const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('x',c*CELL);rect.setAttribute('y',r*CELL);rect.setAttribute('width',CELL);rect.setAttribute('height',CELL);if(t==='blocked')rect.setAttribute('fill','#888');else if(t==='contaminated')rect.setAttribute('fill','url(#dp-cont)');else if(isEffectOtherTile(t)){rect.setAttribute('fill','url(#dp-eo-'+effectOtherTileColor(t).replace('#','')+')');rect.setAttribute('opacity','0.75');}svg.appendChild(rect);}if(regionVisible){for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){const cell=regionGrid[r][c];if(!cell)continue;const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('x',c*CELL);rect.setAttribute('y',r*CELL);rect.setAttribute('width',CELL);rect.setAttribute('height',CELL);rect.setAttribute('fill',hexAlpha(cell.hex,cell.alpha));svg.appendChild(rect);}}for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){const t=grid[r][c];if(!isGapTile(t))continue;const col=gapTileColor(t);if(!col)continue;const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('x',c*CELL);rect.setAttribute('y',r*CELL);rect.setAttribute('width',CELL);rect.setAttribute('height',CELL);rect.setAttribute('fill',col);rect.setAttribute('opacity','0.5');svg.appendChild(rect);}if(selCells.size>0){selCells.forEach(k=>{const[r,c]=k.split(',').map(Number);const hl=document.createElementNS('http://www.w3.org/2000/svg','rect');hl.setAttribute('x',c*CELL);hl.setAttribute('y',r*CELL);hl.setAttribute('width',CELL);hl.setAttribute('height',CELL);hl.setAttribute('fill','rgba(37,99,235,0.15)');svg.appendChild(hl);});selCells.forEach(k=>{const[r,c]=k.split(',').map(Number);for(const[dr,dc,side] of[[0,-1,'l'],[0,1,'r'],[-1,0,'t'],[1,0,'b']]){if(!selCells.has(selKey(r+dr,c+dc))){const l=document.createElementNS('http://www.w3.org/2000/svg','line');const x1=side==='r'?(c+1)*CELL:c*CELL,x2=(side==='l'||side==='r')?x1:(c+1)*CELL;const y1=side==='b'?(r+1)*CELL:r*CELL,y2=(side==='t'||side==='b')?y1:(r+1)*CELL;l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);l.setAttribute('stroke','#2563eb');l.setAttribute('stroke-width','2');l.setAttribute('stroke-dasharray','4,2');svg.appendChild(l);}}});}if(selDragging&&selDragStart&&previewR>=0){const rMin=Math.min(selDragStart.r,previewR),cMin=Math.min(selDragStart.c,previewC),rMax=Math.max(selDragStart.r,previewR),cMax=Math.max(selDragStart.c,previewC);const pr=document.createElementNS('http://www.w3.org/2000/svg','rect');pr.setAttribute('x',cMin*CELL);pr.setAttribute('y',rMin*CELL);pr.setAttribute('width',(cMax-cMin+1)*CELL);pr.setAttribute('height',(rMax-rMin+1)*CELL);pr.setAttribute('fill','rgba(37,99,235,0.08)');pr.setAttribute('stroke','#2563eb');pr.setAttribute('stroke-width','1.5');pr.setAttribute('stroke-dasharray','5,3');svg.appendChild(pr);}if(mode==='textbox'&&tbNewDrag&&tbNewStart&&previewR>=0){const rMin=Math.min(tbNewStart.r,previewR),cMin=Math.min(tbNewStart.c,previewC),rMax=Math.max(tbNewStart.r,previewR),cMax=Math.max(tbNewStart.c,previewC);const tbOk=canPlaceTb(rMin,cMin,rMax,cMax);const pr=document.createElementNS('http://www.w3.org/2000/svg','rect');pr.setAttribute('x',cMin*CELL);pr.setAttribute('y',rMin*CELL);pr.setAttribute('width',(cMax-cMin+1)*CELL);pr.setAttribute('height',(rMax-rMin+1)*CELL);pr.setAttribute('fill',tbOk?'rgba(168,85,247,0.1)':'rgba(200,0,0,0.12)');pr.setAttribute('stroke',tbOk?'#a855f7':'#c00');pr.setAttribute('stroke-width','2');pr.setAttribute('stroke-dasharray','5,3');svg.appendChild(pr);}if(arrangeActive&&arrangeAnchorR>=0){const previews=getArrangePreviewBlocks(arrangeAnchorR,arrangeAnchorC);const ok=canArrangeAt(arrangeAnchorR,arrangeAnchorC);previews.forEach(b=>{const el=document.createElementNS('http://www.w3.org/2000/svg','rect');el.setAttribute('x',b.c*CELL);el.setAttribute('y',b.r*CELL);el.setAttribute('width',b.cells*CELL);el.setAttribute('height',b.cells*CELL);el.setAttribute('fill',ok?b.color+'88':'rgba(200,0,0,0.25)');el.setAttribute('stroke',ok?b.color:'#c00');el.setAttribute('stroke-width','2');el.setAttribute('stroke-dasharray','4,2');svg.appendChild(el);});}for(let c=0;c<=cols;c++){const l=document.createElementNS('http://www.w3.org/2000/svg','line');l.setAttribute('x1',c*CELL);l.setAttribute('y1',0);l.setAttribute('x2',c*CELL);l.setAttribute('y2',H);l.setAttribute('stroke','#e0e0e0');l.setAttribute('stroke-width','1');svg.appendChild(l);}for(let r=0;r<=rows;r++){const l=document.createElementNS('http://www.w3.org/2000/svg','line');l.setAttribute('x1',0);l.setAttribute('y1',r*CELL);l.setAttribute('x2',W);l.setAttribute('y2',r*CELL);l.setAttribute('stroke','#e0e0e0');l.setAttribute('stroke-width','1');svg.appendChild(l);}wrap.appendChild(svg);if(isRelocating&&relocateAnchorR>=0){relocateOffsets.forEach(o=>{const b=blocks.find(x=>x.id===o.id);if(!b)return;const nr=relocateAnchorR+o.dr,nc=relocateAnchorC+o.dc;if(nr<0||nc<0||nr+b.cells>rows||nc+b.cells>cols)return;const el=document.createElement('div');el.style.cssText=`position:absolute;top:${nr*CELL}px;left:${nc*CELL}px;width:${b.cells*CELL}px;height:${b.cells*CELL}px;background:${b.color}88;border:2px dashed #059669;z-index:20;pointer-events:none`;wrap.appendChild(el);});}blocks.forEach(blk=>{const px=blk.cells*CELL,col=blk.color||'#111';const isBindable=blk.type==='base'||blk.type==='obj';const blkZ=mode==='blockind'&&isBindable?15:mode==='move'?5:3;const blkPE=mode==='blockind'&&isBindable?(IS_TOUCH?'none':'auto'):mode==='move'?'auto':'none';const el=document.createElement('div');el.style.cssText=`position:absolute;top:${blk.r*CELL}px;left:${blk.c*CELL}px;width:${px}px;height:${px}px;z-index:${blkZ};cursor:${mode==='move'?'grab':mode==='blockind'&&isBindable?'pointer':'default'};overflow:hidden;pointer-events:${blkPE}`;if(blk.barrier){const bs=document.createElementNS('http://www.w3.org/2000/svg','svg');bs.setAttribute('width',px);bs.setAttribute('height',px);bs.style.cssText='position:absolute;top:0;left:0;pointer-events:none';const bd=document.createElementNS('http://www.w3.org/2000/svg','defs');bd.appendChild(makeStripePat('sp-'+blk.id,col));bs.appendChild(bd);const br=document.createElementNS('http://www.w3.org/2000/svg','rect');br.setAttribute('width',px);br.setAttribute('height',px);br.setAttribute('fill','url(#sp-'+blk.id+')');bs.appendChild(br);el.appendChild(bs);}else el.style.background=col;if(blk.highlight&&blk.highlight.sz>0)el.style.border=`${blk.highlight.sz}px solid ${blk.highlight.col}`;else el.style.border='1.5px solid rgba(0,0,0,0.35)';if(bindSelected.has(blk.id))el.style.outline='3px solid #059669';if(blk.textLabel&&blk.textLabel.txt){const tl=blk.textLabel;const tle=document.createElement('div');const bg=tl.bg==='transparent'?'transparent':tl.bg||'#fff';tle.style.cssText=`position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:${tl.sz}px;color:${tl.col};background:${bg};padding:1px 3px;white-space:nowrap;pointer-events:none;z-index:4;max-width:${px}px;overflow:hidden;text-align:center`;tle.textContent=tl.txt;el.appendChild(tle);}if(getSelBlocks().find(x=>x.id===blk.id))el.style.outline='2px dashed #2563eb';if(mode==='blockind'&&isBindable){el.addEventListener('click',e=>{e.stopPropagation();onBindBlockClick(blk);});el.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();onBindBlockRightClick(blk);});/* モバイルのタッチ処理はオーバーレイ(onTouchStart/onTouchEnd)で一元管理 */}else if(mode==='move'){el.addEventListener('mousedown',e=>{if(e.button===2)return;e.preventDefault();e.stopPropagation();startDragMouse(e,blk);});el.addEventListener('contextmenu',e=>e.preventDefault());el.addEventListener('touchstart',e=>{if(isMultiTouch){e.preventDefault();e.stopPropagation();return;}e.preventDefault();e.stopPropagation();startDragTouch(e,blk);},{passive:false});}wrap.appendChild(el);if(regionVisible){for(let dr=0;dr<blk.cells;dr++) for(let dc=0;dc<blk.cells;dc++){const r=blk.r+dr,c=blk.c+dc;const cell=regionGrid[r]?.[c];if(!cell)continue;const rv=document.createElement('div');rv.style.cssText=`position:absolute;top:${r*CELL}px;left:${c*CELL}px;width:${CELL}px;height:${CELL}px;z-index:4;pointer-events:none;background:${hexAlpha(cell.hex,cell.alpha)}`;wrap.appendChild(rv);}}});if(effectVisible){blocks.forEach(blk=>{for(let dr=0;dr<blk.cells;dr++) for(let dc=0;dc<blk.cells;dc++){const r=blk.r+dr,c=blk.c+dc;if(r<rows&&c<cols&&grid[r][c]==='contaminated'){const div=document.createElement('div');div.style.cssText=`position:absolute;top:${r*CELL}px;left:${c*CELL}px;width:${CELL}px;height:${CELL}px;z-index:${mode==='blockind'?14:6};pointer-events:none`;const ds=document.createElementNS('http://www.w3.org/2000/svg','svg');ds.setAttribute('width',CELL);ds.setAttribute('height',CELL);const dd=document.createElementNS('http://www.w3.org/2000/svg','defs');dd.appendChild(makeContPat('cov-'+r+'-'+c));ds.appendChild(dd);const dr2=document.createElementNS('http://www.w3.org/2000/svg','rect');dr2.setAttribute('width',CELL);dr2.setAttribute('height',CELL);dr2.setAttribute('fill','url(#cov-'+r+'-'+c+')');ds.appendChild(dr2);div.appendChild(ds);wrap.appendChild(div);}if(r<rows&&c<cols&&isEffectOtherTile(grid[r][c])){const eocol=effectOtherTileColor(grid[r][c]);const div=document.createElement('div');div.style.cssText=`position:absolute;top:${r*CELL}px;left:${c*CELL}px;width:${CELL}px;height:${CELL}px;z-index:${mode==='blockind'?14:8};pointer-events:none`;const ds=document.createElementNS('http://www.w3.org/2000/svg','svg');ds.setAttribute('width',CELL);ds.setAttribute('height',CELL);const dd=document.createElementNS('http://www.w3.org/2000/svg','defs');dd.appendChild(makeEffectOtherPat('eov-'+r+'-'+c,eocol));ds.appendChild(dd);const dr2=document.createElementNS('http://www.w3.org/2000/svg','rect');dr2.setAttribute('width',CELL);dr2.setAttribute('height',CELL);dr2.setAttribute('fill','url(#eov-'+r+'-'+c+')');dr2.setAttribute('opacity','0.8');ds.appendChild(dr2);div.appendChild(ds);wrap.appendChild(div);}}});}if(dragBlock&&dragPreviewR>=0){const cells=dragBlock.cells,ok=canPlace(dragPreviewR,dragPreviewC,cells,dragBlock.id);const el=document.createElement('div');el.style.cssText=`position:absolute;top:${dragPreviewR*CELL}px;left:${dragPreviewC*CELL}px;width:${cells*CELL}px;height:${cells*CELL}px;background:${ok?'rgba(0,0,0,0.22)':'rgba(200,0,0,0.18)'};border:2px dashed ${ok?'#555':'#c00'};z-index:25;pointer-events:none`;wrap.appendChild(el);}if((mode==='block90'||mode==='objblock')&&!dragBlock&&previewR>=0){const cells=mode==='block90'?BASE_CELLS:getObjSize();const{tr,tc}=blockTopLeft(previewR,previewC,cells);const ok=canPlace(tr,tc,cells);const el=document.createElement('div');el.style.cssText=`position:absolute;top:${tr*CELL}px;left:${tc*CELL}px;width:${cells*CELL}px;height:${cells*CELL}px;background:${ok?'rgba(60,100,200,0.18)':'rgba(200,0,0,0.15)'};border:2px dashed ${ok?'#446':'#c00'};z-index:9;pointer-events:none`;wrap.appendChild(el);}if((mode==='block90'||mode==='objblock')&&mobilePreviewR>=0){const cells=mode==='block90'?BASE_CELLS:getObjSize();const ok=canPlace(mobilePreviewR,mobilePreviewC,cells);const pw=cells*CELL;const pEl=document.createElement('div');pEl.style.cssText=`position:absolute;top:${mobilePreviewR*CELL}px;left:${mobilePreviewC*CELL}px;width:${pw}px;height:${pw}px;background:${ok?'rgba(37,99,235,0.25)':'rgba(200,0,0,0.18)'};border:3px solid ${ok?'#2563eb':'#c00'};z-index:11;pointer-events:none;display:flex;align-items:flex-start;justify-content:flex-start`;const hint=document.createElement('div');hint.style.cssText=`font-size:9px;background:${ok?'#2563eb':'#c00'};color:#fff;padding:1px 3px;border-radius:0 0 3px 0;white-space:nowrap;line-height:1.4`;hint.textContent=ok?'もう一度タップで設置':'置けません';pEl.appendChild(hint);wrap.appendChild(pEl);}if((mode==='contaminated'||mode==='effectother')&&!dragBlock&&previewR>=0){const sz=mode==='contaminated'?getContSize():getEffectOtherSize();if(sz>1){const h2=Math.floor(sz/2),tr=previewR-h2,tc=previewC-h2;const el=document.createElement('div');el.style.cssText=`position:absolute;top:${tr*CELL}px;left:${tc*CELL}px;width:${sz*CELL}px;height:${sz*CELL}px;background:rgba(220,38,38,0.1);border:2px dashed #f97316;z-index:9;pointer-events:none`;wrap.appendChild(el);}}if((mode==='_paste'||isMovingSel)&&clipboard&&pastePreviewR>=0){const{selCells:sc,grid2d}=clipboard;const ok=canPaste(pastePreviewR,pastePreviewC);sc.forEach(k=>{const[dr,dc]=k.split(',').map(Number);const r=pastePreviewR+dr,c=pastePreviewC+dc;if(r<0||r>=rows||c<0||c>=cols)return;const t=grid2d[dr][dc];const el=document.createElement('div');el.style.cssText=`position:absolute;top:${r*CELL}px;left:${c*CELL}px;width:${CELL}px;height:${CELL}px;z-index:11;pointer-events:none;opacity:0.6`;if(t==='blocked')el.style.background='#888';else el.style.background='rgba(200,220,255,0.3)';wrap.appendChild(el);});const s2=selBBoxFromSet(sc);if(s2){const bd=document.createElement('div');bd.style.cssText=`position:absolute;top:${(pastePreviewR+s2.r1)*CELL}px;left:${(pastePreviewC+s2.c1)*CELL}px;width:${(s2.c2-s2.c1+1)*CELL}px;height:${(s2.r2-s2.r1+1)*CELL}px;border:2px dashed ${ok?'#2563eb':'#c00'};z-index:12;pointer-events:none`;wrap.appendChild(bd);}}renderTextboxes();const overlay=document.createElement('div');overlay.style.cssText=`position:absolute;top:0;left:0;width:${W}px;height:${H}px;z-index:10;cursor:${isRelocating?'crosshair':mode==='move'?'grab':mode==='eraser'?'cell':mode==='blockind'?'default':'crosshair'}`;overlay.addEventListener('mousemove',onOverlayMove);overlay.addEventListener('mousedown',onOverlayDown);overlay.addEventListener('mouseup',onOverlayUp);overlay.addEventListener('mouseleave',()=>{previewR=-1;previewC=-1;if(!dragBlock&&!isPanning&&!arrangeActive&&!isRelocating&&!tbNewDrag)renderAll();if(arrangeActive){arrangeAnchorR=-1;arrangeAnchorC=-1;renderAll();}});overlay.addEventListener('contextmenu',e=>e.preventDefault());overlay.addEventListener('touchstart',onTouchStart,{passive:false});overlay.addEventListener('touchmove',onTouchMove,{passive:false});overlay.addEventListener('touchend',onTouchEnd,{passive:false});wrap.appendChild(overlay);}
-function doErase(r,c,tapPx,tapPy){for(let i=textboxes.length-1;i>=0;i--){const tb=textboxes[i];if(tapPx>=tb.c*CELL&&tapPx<=(tb.c+tb.w)*CELL&&tapPy>=tb.r*CELL&&tapPy<=(tb.r+tb.h)*CELL){if(selectedTbId===tb.id)selectedTbId=null;textboxes.splice(i,1);saveHistory();setStatus('テキストボックスを消去しました');renderAll();return;}}const blk=blockAtCell(r,c);if(blk){blocks=blocks.filter(b=>b.id!==blk.id);bindSelected.delete(blk.id);saveHistory();setStatus('ブロックを消去しました');renderAll();return;}if(grid[r][c]!=='floor'){grid[r][c]='floor';saveHistory();setStatus('タイルを消去しました');renderAll();return;}if(regionGrid[r][c]){regionGrid[r][c]=null;saveHistory();setStatus('領域を消去しました');renderAll();return;}setStatus('消去できる要素がありません');}
+function doErase(r,c,tapPx,tapPy){
+  // FIX-3: blocked設置直後の同一タップ/連続イベントでは消去しない
+  if(Date.now()<justPlacedBlockedUntil)return;
+  // FIX-3: 設置不可能モード中は、消しゴム処理に落ちてもタイルを消さない
+  if(mode==='blocked')return;
+  for(let i=textboxes.length-1;i>=0;i--){const tb=textboxes[i];if(tapPx>=tb.c*CELL&&tapPx<=(tb.c+tb.w)*CELL&&tapPy>=tb.r*CELL&&tapPy<=(tb.r+tb.h)*CELL){if(selectedTbId===tb.id)selectedTbId=null;textboxes.splice(i,1);saveHistory();setStatus('テキストボックスを消去しました');renderAll();return;}}const blk=blockAtCell(r,c);if(blk){blocks=blocks.filter(b=>b.id!==blk.id);bindSelected.delete(blk.id);saveHistory();setStatus('ブロックを消去しました');renderAll();return;}if(grid[r][c]!=='floor'){grid[r][c]='floor';saveHistory();setStatus('タイルを消去しました');renderAll();return;}if(regionGrid[r][c]){regionGrid[r][c]=null;saveHistory();setStatus('領域を消去しました');renderAll();return;}setStatus('消去できる要素がありません');}
 function selKey(r,c){return r+','+c;}
 function selBBox(){if(!selCells.size)return null;let r1=Infinity,c1=Infinity,r2=-Infinity,c2=-Infinity;selCells.forEach(k=>{const[r,c]=k.split(',').map(Number);r1=Math.min(r1,r);c1=Math.min(c1,c);r2=Math.max(r2,r);c2=Math.max(c2,c);});return{r1,c1,r2,c2};}
 function inSelCells(r,c){return selCells.has(selKey(r,c));}
@@ -481,32 +563,244 @@ function findRectangularRegions(){const visited=new Set();const regions=[];selCe
 function getBasesInRegion(reg){return blocks.filter(b=>b.type==='base'&&b.r>=reg.r1&&b.c>=reg.c1&&b.r+b.cells-1<=reg.r2&&b.c+b.cells-1<=reg.c2);}
 function applyAlignInSelection(){const regions=findRectangularRegions();if(regions===null){setStatus('整列は正方形または長方形の選択が必要です');return;}const rwb=regions.map(reg=>{const bases=getBasesInRegion(reg);return{reg,bases,area:(reg.r2-reg.r1+1)*(reg.c2-reg.c1+1)};}).filter(x=>x.bases.length>0);if(rwb.length===0){setStatus('範囲内に整列できる基地がありません');return;}const{reg,bases}=rwb.sort((a,b)=>b.area-a.area)[0];const anchor=document.getElementById('align-anchor').value;const gapR=Math.min(10,Math.max(0,readIntField('align-gap-r',0)));const gapC=Math.min(10,Math.max(0,readIntField('align-gap-c',0)));const regW=reg.c2-reg.c1+1,regH=reg.r2-reg.r1+1,step=BASE_CELLS,n=bases.length;let bestLayout=null;for(let nc=1;nc<=n;nc++){const nr=Math.ceil(n/nc);const nw=nc*step+(nc-1)*gapC,nh=nr*step+(nr-1)*gapR;if(nw<=regW&&nh<=regH){if(!bestLayout||nc*nr<bestLayout.nc*bestLayout.nr)bestLayout={nc,nr};}}if(!bestLayout){setStatus('選択範囲に入りきりません');return;}const{nc,nr}=bestLayout;const neededW=nc*step+(nc-1)*gapC,neededH=nr*step+(nr-1)*gapR;let startR,startC;if(anchor==='tl'){startR=reg.r1;startC=reg.c1;}else if(anchor==='tr'){startR=reg.r1;startC=reg.c2-neededW+1;}else if(anchor==='br'){startR=reg.r2-neededH+1;startC=reg.c2-neededW+1;}else{startR=reg.r2-neededH+1;startC=reg.c1;}const newPos=bases.map((b,i)=>({...b,r:startR+Math.floor(i/nc)*(step+gapR),c:startC+(i%nc)*(step+gapC)}));for(const nb of newPos){if(nb.r<reg.r1||nb.c<reg.c1||nb.r+nb.cells-1>reg.r2||nb.c+nb.cells-1>reg.c2){setStatus('選択範囲に入りきりません');return;}}const baseIds=new Set(bases.map(b=>b.id));for(const nb of newPos){for(let dr=0;dr<nb.cells;dr++) for(let dc=0;dc<nb.cells;dc++){if(blocks.some(x=>!baseIds.has(x.id)&&blockOccupies(x,nb.r+dr,nb.c+dc))){setStatus('基地が衝突します');return;}}}const occ=new Set();for(const nb of newPos){for(let dr=0;dr<nb.cells;dr++) for(let dc=0;dc<nb.cells;dc++){const k=(nb.r+dr)+','+(nb.c+dc);if(occ.has(k)){setStatus('基地が衝突します');return;}occ.add(k);}}newPos.forEach(nb=>{const b=blocks.find(x=>x.id===nb.id);if(b){b.r=nb.r;b.c=nb.c;}});saveHistory();setStatus(`${n}個の基地を整列しました`);document.getElementById('align-sub').style.display='none';renderAll();}
 function toggleArrPanel(){const p=document.getElementById('arr-panel');p.style.display=p.style.display==='none'?'flex':'none';if(p.style.display==='none')cancelArrange();}
-function startArrange(){arrangeDragging=false;arrangeAnchorR=-1;arrangeAnchorC=-1;arrangeActive=true;setStatus('マップ上でドラッグして開始位置を指定');renderAll();}
-function cancelArrange(){arrangeActive=false;arrangeDragging=false;arrangeAnchorR=-1;arrangeAnchorC=-1;renderAll();}
-function getArrangePreviewBlocks(ar,ac){const{nrows,ncols,gapR,gapC,color,barrier}=getArrParams();const list=[];for(let ri=0;ri<nrows;ri++) for(let ci=0;ci<ncols;ci++)list.push({r:ar+ri*(BASE_CELLS+gapR),c:ac+ci*(BASE_CELLS+gapC),cells:BASE_CELLS,color,barrier});return list;}
-function canArrangeAt(ar,ac){for(const b of getArrangePreviewBlocks(ar,ac)){if(b.r<0||b.c<0||b.r+b.cells>rows||b.c+b.cells>cols)return false;for(let dr=0;dr<b.cells;dr++) for(let dc=0;dc<b.cells;dc++){if(grid[b.r+dr]?.[b.c+dc]==='blocked')return false;if(isBlockCell(b.r+dr,b.c+dc,null))return false;}}const occ=new Set();for(const b of getArrangePreviewBlocks(ar,ac)){for(let dr=0;dr<b.cells;dr++) for(let dc=0;dc<b.cells;dc++){const k=(b.r+dr)+','+(b.c+dc);if(occ.has(k))return false;occ.add(k);}}return true;}
-function applyArrange(ar,ac){if(!canArrangeAt(ar,ac)){setStatus('既存のブロックと重なるか範囲外のため配置できません');return;}const{color,barrier}=getArrParams();getArrangePreviewBlocks(ar,ac).forEach(b=>blocks.push({id:++idCounter,r:b.r,c:b.c,cells:b.cells,color:b.color,barrier:b.barrier,type:'base'}));saveHistory();setStatus(`${getArrangePreviewBlocks(ar,ac).length}個の基地を配置しました`);arrangeActive=false;arrangeDragging=false;arrangeAnchorR=-1;arrangeAnchorC=-1;renderAll();}
+// FIX-2: 基地ブロック整列配置。クリック/タップで左上位置を指定して applyArrange() まで確実に到達させる
+function startArrange(){
+  arrangeActive=true;
+  arrangeDragging=false;
+  arrangeAnchorR=-1;
+  arrangeAnchorC=-1;
+  previewR=-1;
+  previewC=-1;
+  setStatus('整列配置: 配置したい左上位置をクリック/タップしてください');
+  renderAll();
+}
+function cancelArrange(){
+  arrangeActive=false;
+  arrangeDragging=false;
+  arrangeAnchorR=-1;
+  arrangeAnchorC=-1;
+  previewR=-1;
+  previewC=-1;
+  renderAll();
+}
+function getArrangePreviewBlocks(ar,ac){
+  const{nrows,ncols,gapR,gapC,color,barrier}=getArrParams();
+  const list=[];
+  for(let ri=0;ri<nrows;ri++){
+    for(let ci=0;ci<ncols;ci++){
+      list.push({
+        r:ar+ri*(BASE_CELLS+gapR),
+        c:ac+ci*(BASE_CELLS+gapC),
+        cells:BASE_CELLS,
+        color,
+        barrier,
+        type:'base'
+      });
+    }
+  }
+  return list;
+}
+function canArrangeAt(ar,ac){
+  if(ar<0||ac<0)return false;
+  const list=getArrangePreviewBlocks(ar,ac);
+  for(const b of list){
+    if(b.r<0||b.c<0||b.r+b.cells>rows||b.c+b.cells>cols)return false;
+    for(let dr=0;dr<b.cells;dr++){
+      for(let dc=0;dc<b.cells;dc++){
+        const rr=b.r+dr,cc=b.c+dc;
+        if(grid[rr]?.[cc]==='blocked')return false;
+        if(isBlockCell(rr,cc,null))return false;
+      }
+    }
+  }
+  const occ=new Set();
+  for(const b of list){
+    for(let dr=0;dr<b.cells;dr++){
+      for(let dc=0;dc<b.cells;dc++){
+        const k=(b.r+dr)+','+(b.c+dc);
+        if(occ.has(k))return false;
+        occ.add(k);
+      }
+    }
+  }
+  return true;
+}
+function applyArrange(ar,ac){
+  if(!canArrangeAt(ar,ac)){
+    setStatus('既存のブロックと重なるか範囲外のため配置できません');
+    renderAll();
+    return;
+  }
+  const list=getArrangePreviewBlocks(ar,ac);
+  list.forEach(b=>blocks.push({
+    id:++idCounter,
+    r:b.r,
+    c:b.c,
+    cells:b.cells,
+    color:b.color,
+    barrier:b.barrier,
+    type:'base'
+  }));
+  arrangeActive=false;
+  arrangeDragging=false;
+  arrangeAnchorR=-1;
+  arrangeAnchorC=-1;
+  previewR=-1;
+  previewC=-1;
+  saveHistory();
+  setStatus(`${list.length}個の基地を配置しました`);
+  renderAll();
+}
 function getXY(e){const rect=document.getElementById('grid-wrap').getBoundingClientRect();return{px:(e.clientX-rect.left)/scale,py:(e.clientY-rect.top)/scale};}
 function cellAt(px,py){return{r:Math.floor(py/CELL),c:Math.floor(px/CELL)};}
 function clampRC(r,c){return{r:Math.max(0,Math.min(rows-1,r)),c:Math.max(0,Math.min(cols-1,c))};}
 function onOverlayMove(e){if(isPanning){const ga=document.getElementById('grid-area');ga.scrollLeft=panScrollX-(e.clientX-panStartX);ga.scrollTop=panScrollY-(e.clientY-panStartY);return;}const{px,py}=getXY(e);const raw=cellAt(px,py);const{r,c}=clampRC(raw.r,raw.c);if(isRelocating){relocateAnchorR=r;relocateAnchorC=c;renderAll();return;}if(arrangeActive){arrangeAnchorR=r;arrangeAnchorC=c;renderAll();return;}if((mode==='_paste'||isMovingSel)&&clipboard){pastePreviewR=r;pastePreviewC=c;renderAll();return;}if(selDragging){previewR=r;previewC=c;renderAll();return;}if(mode==='textbox'&&tbNewDrag){previewR=r;previewC=c;renderAll();return;}if(r===previewR&&c===previewC)return;previewR=r;previewC=c;if(isDrawing&&['contaminated','effectother','blocked'].includes(mode))doPaintLeft(r,c);renderAll();}
-function onOverlayDown(e){const{px,py}=getXY(e);const raw=cellAt(px,py);const{r,c}=clampRC(raw.r,raw.c);if(e.button===2){e.preventDefault();if(mode==='move'||mode==='blockind'||mode==='textbox'||mode==='eraser')return;if(mode==='select'&&inSelCells(r,c)){const comp=selConnectedFrom(r,c);comp.forEach(k=>selCells.delete(k));if(selCells.size===0)clearSelection();else renderAll();return;}doRightAction(r,c);return;}if(mode==='eraser'){doErase(r,c,px,py);return;}if(mode==='textbox'){if(selectedTbId){selectedTbId=null;renderAll();return;}const ex=document.getElementById('tb-editor-overlay');if(ex)document.body.removeChild(ex);tbNewDrag=true;tbNewStart={r,c};previewR=r;previewC=c;renderAll();return;}if(isRelocating){applyRelocate(r,c);return;}if(arrangeActive){arrangeDragging=true;arrangeAnchorR=r;arrangeAnchorC=c;renderAll();return;}if(mode==='_paste'||isMovingSel){if(isMovingSel)applyMoveSelection(r,c);else applyPaste(r,c);return;}if(mode==='select'){selDragStart={r,c};selDragging=true;previewR=r;previewC=c;renderAll();return;}if(mode==='move'){isPanning=true;panStartX=e.clientX;panStartY=e.clientY;const ga=document.getElementById('grid-area');panScrollX=ga.scrollLeft;panScrollY=ga.scrollTop;return;}if(mode==='blockind')return;if(mode==='block90'||mode==='objblock'){placeBlock(r,c);return;}isDrawing=true;doPaintLeft(r,c);}
-function onOverlayUp(){if(mode==='textbox'&&tbNewDrag&&tbNewStart){tbNewDrag=false;const r1=Math.min(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c1=Math.min(tbNewStart.c,previewC>=0?previewC:tbNewStart.c),r2=Math.max(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c2=Math.max(tbNewStart.c,previewC>=0?previewC:tbNewStart.c);if(!canPlaceTb(r1,c1,r2,c2)){tbNewStart=null;previewR=-1;previewC=-1;setStatus('他のテキストボックスの2マス以内には設置できません');renderAll();return;}const p=getTbParams();const tb={id:++tbIdCounter,r:r1,c:c1,w:c2-c1+1,h:r2-r1+1,...p,text:''};textboxes.push(tb);selectedTbId=tb.id;tbNewStart=null;previewR=-1;previewC=-1;saveHistory();renderAll();setStatus('テキストボックスを追加しました');return;}if(arrangeDragging){arrangeDragging=false;applyArrange(arrangeAnchorR,arrangeAnchorC);return;}if(selDragging&&selDragStart){selDragging=false;addRectToSel(selDragStart.r,selDragStart.c,previewR,previewC);selDragStart=null;if(selCells.size>0){selActive=true;showSelActions();const s=selBBox();setStatus(`選択: ${s.c2-s.c1+1}×${s.r2-s.r1+1} (累計${selCells.size}マス)`);}renderAll();return;}isPanning=false;if(!dragBlock)isDrawing=false;}
-function doRightAction(r,c){if(r<0||r>=rows||c<0||c>=cols)return;if(mode==='contaminated'){if(grid[r][c]==='contaminated'){grid[r][c]='floor';saveHistory();setStatus('汚染タイルを消去しました');renderAll();return;}const n=floodFillContaminated(r,c);if(n===0)setStatus('囲まれた範囲の外側です');else{saveHistory();setStatus(`囲み塗り: ${n}マス`);}renderAll();}else if(mode==='effectother'){const fv=effectOtherKey(getEffectOtherColor());if(grid[r][c]===fv){grid[r][c]='floor';saveHistory();setStatus('タイルを消去しました');renderAll();return;}const n=floodFillEffectOther(r,c);if(n===0)setStatus('囲まれた範囲の外側です');else{saveHistory();setStatus(`囲み塗り: ${n}マス`);}renderAll();}else if(mode==='blocked'){if(isBlockCell(r,c)){setStatus('ブロック上には設置不可');return;}if(grid[r][c]==='blocked'){grid[r][c]='floor';saveHistory();setStatus('設置不可エリアを消去しました');renderAll();return;}const n=floodFillBlocked(r,c);if(n===0)setStatus('囲まれた範囲の外側です');else{saveHistory();setStatus(`囲み塗り: ${n}マス`);}renderAll();}else{const blk=blockAtCell(r,c);if(blk)removeBlock(blk.id);else{grid[r][c]='floor';saveHistory();renderAll();}}}
-function doPaintLeft(r,c){if(r<0||r>=rows||c<0||c>=cols)return;if(mode==='contaminated'){const sz=getContSize();if(sz<=1){if(grid[r][c]!=='blocked')grid[r][c]='contaminated';}else{const h=Math.floor(sz/2);for(let dr=0;dr<sz;dr++) for(let dc=0;dc<sz;dc++){const nr=r-h+dr,nc=c-h+dc;if(nr>=0&&nr<rows&&nc>=0&&nc<cols&&grid[nr][nc]!=='blocked')grid[nr][nc]='contaminated';}}}else if(mode==='effectother'){const sz=getEffectOtherSize();const fv=effectOtherKey(getEffectOtherColor());if(sz<=1){if(grid[r][c]!=='blocked')grid[r][c]=fv;}else{const h=Math.floor(sz/2);for(let dr=0;dr<sz;dr++) for(let dc=0;dc<sz;dc++){const nr=r-h+dr,nc=c-h+dc;if(nr>=0&&nr<rows&&nc>=0&&nc<cols&&grid[nr][nc]!=='blocked')grid[nr][nc]=fv;}}}else if(mode==='blocked'){if(!isBlockCell(r,c))grid[r][c]='blocked';}renderAll();}
-function placeBlock(r,c){const isBase=mode==='block90',cells=isBase?BASE_CELLS:getObjSize();const{tr,tc}=blockTopLeft(r,c,cells);if(canPlace(tr,tc,cells)){blocks.push({id:++idCounter,r:tr,c:tc,cells,color:isBase?getBaseColor():getObjColor(),barrier:isBase&&document.getElementById('barrier-check').checked,type:isBase?'base':'obj'});saveHistory();setStatus((isBase?'基地':'オブジェクト')+'を配置しました');renderAll();}else setStatus('ここには置けません');}
+function onOverlayDown(e){const{px,py}=getXY(e);const raw=cellAt(px,py);const{r,c}=clampRC(raw.r,raw.c);if(e.button===2){e.preventDefault();if(mode==='move'||mode==='blockind'||mode==='textbox'||mode==='eraser')return;if(mode==='select'&&inSelCells(r,c)){const comp=selConnectedFrom(r,c);comp.forEach(k=>selCells.delete(k));if(selCells.size===0)clearSelection();else renderAll();return;}doRightAction(r,c);return;}if(mode==='eraser'){doErase(r,c,px,py);return;}if(mode==='textbox'){
+  if(selectedTbId){
+    selectedTbId=null;
+    ignoreNextTextboxCreate=true;
+    tbNewDrag=false;
+    tbNewStart=null;
+    renderAll();
+    return;
+  }
+  if(ignoreNextTextboxCreate){
+    ignoreNextTextboxCreate=false;
+    tbNewDrag=false;
+    tbNewStart=null;
+    previewR=-1;
+    previewC=-1;
+    renderAll();
+    return;
+  }
+  const ex=document.getElementById('tb-editor-overlay');
+  if(ex)document.body.removeChild(ex);
+  tbNewDrag=true;
+  tbNewStart={r,c};
+  previewR=r;
+  previewC=c;
+  renderAll();
+  return;
+}if(isRelocating){applyRelocate(r,c);return;}if(arrangeActive){arrangeDragging=true;arrangeAnchorR=r;arrangeAnchorC=c;renderAll();return;}if(mode==='_paste'||isMovingSel){if(isMovingSel)applyMoveSelection(r,c);else applyPaste(r,c);return;}if(mode==='select'){selDragStart={r,c};selDragging=true;previewR=r;previewC=c;renderAll();return;}if(mode==='move'){isPanning=true;panStartX=e.clientX;panStartY=e.clientY;const ga=document.getElementById('grid-area');panScrollX=ga.scrollLeft;panScrollY=ga.scrollTop;return;}if(mode==='blockind')return;if(mode==='block90'||mode==='objblock'){placeBlock(r,c);return;}isDrawing=true;doPaintLeft(r,c);}
+function onOverlayUp(){if(mode==='textbox'&&tbNewDrag&&tbNewStart){tbNewDrag=false;const r1=Math.min(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c1=Math.min(tbNewStart.c,previewC>=0?previewC:tbNewStart.c),r2=Math.max(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c2=Math.max(tbNewStart.c,previewC>=0?previewC:tbNewStart.c);if(!canPlaceTb(r1,c1,r2,c2)){tbNewStart=null;previewR=-1;previewC=-1;setStatus('他のテキストボックスの2マス以内には設置できません');renderAll();return;}const p=getTbParams();const tb={id:++tbIdCounter,r:r1,c:c1,w:c2-c1+1,h:r2-r1+1,...p,text:''};textboxes.push(tb);selectedTbId=tb.id;tbNewStart=null;previewR=-1;previewC=-1;saveHistory();renderAll();setStatus('テキストボックスを追加しました');return;}if(IS_TOUCH&&arrangeActive&&isTapEnd(e)&&touchStartPos){const _tr=touchStartPos.r,_tc=touchStartPos.c;if(arrangeAnchorR===_tr&&arrangeAnchorC===_tc&&arrangeAnchorR>=0){/* 同じマスを2回タップ → 設置 */applyArrange(arrangeAnchorR,arrangeAnchorC);}else{/* 初回タップ or 別マス → プレビュー更新 */arrangeAnchorR=_tr;arrangeAnchorC=_tc;const _ok=canArrangeAt(_tr,_tc);setStatus(_ok?'もう一度同じ位置をタップして配置':'ここには配置できません');renderAll();}touchStartPos=null;previewR=-1;previewC=-1;return;}if(arrangeDragging){arrangeDragging=false;applyArrange(arrangeAnchorR,arrangeAnchorC);return;}if(selDragging&&selDragStart){selDragging=false;addRectToSel(selDragStart.r,selDragStart.c,previewR,previewC);selDragStart=null;if(selCells.size>0){selActive=true;showSelActions();const s=selBBox();setStatus(`選択: ${s.c2-s.c1+1}×${s.r2-s.r1+1} (累計${selCells.size}マス)`);}renderAll();return;}isPanning=false;if(!dragBlock)isDrawing=false;}
+function doRightAction(r,c){if(r<0||r>=rows||c<0||c>=cols)return;if(mode==='contaminated'){if(grid[r][c]==='contaminated'){grid[r][c]='floor';saveHistory();setStatus('汚染タイルを消去しました');renderAll();return;}const n=floodFillContaminated(r,c);if(n===0)setStatus('囲まれた範囲の外側です');else{saveHistory();setStatus(`囲み塗り: ${n}マス`);}renderAll();}else if(mode==='effectother'){const fv=effectOtherKey(getEffectOtherColor());if(grid[r][c]===fv){grid[r][c]='floor';saveHistory();setStatus('タイルを消去しました');renderAll();return;}const n=floodFillEffectOther(r,c);if(n===0)setStatus('囲まれた範囲の外側です');else{saveHistory();setStatus(`囲み塗り: ${n}マス`);}renderAll();}else if(mode==='blocked'){
+  // FIX-3: blocked配置モード中は既存blockedを右クリック/長押ししても消さない（消去は消しゴムに限定）
+  if(isBlockCell(r,c)){setStatus('ブロック上には設置不可');return;}
+  if(grid[r][c]==='blocked'){
+    setStatus('設置不可エリアです。消す場合は消しゴムを使ってください');
+    renderAll();
+    return;
+  }
+  const n=floodFillBlocked(r,c);
+  if(n===0)setStatus('囲まれた範囲の外側です');
+  else{justPlacedBlockedUntil=Date.now()+300;saveHistory();setStatus(`囲み塗り: ${n}マス`);}
+  renderAll();
+}else{const blk=blockAtCell(r,c);if(blk)removeBlock(blk.id);else{grid[r][c]='floor';saveHistory();renderAll();}}}
+function doPaintLeft(r,c){if(r<0||r>=rows||c<0||c>=cols)return;if(mode==='contaminated'){const sz=getContSize();if(sz<=1){if(grid[r][c]!=='blocked')grid[r][c]='contaminated';}else{const h=Math.floor(sz/2);for(let dr=0;dr<sz;dr++) for(let dc=0;dc<sz;dc++){const nr=r-h+dr,nc=c-h+dc;if(nr>=0&&nr<rows&&nc>=0&&nc<cols&&grid[nr][nc]!=='blocked')grid[nr][nc]='contaminated';}}}else if(mode==='effectother'){const sz=getEffectOtherSize();const fv=effectOtherKey(getEffectOtherColor());if(sz<=1){if(grid[r][c]!=='blocked')grid[r][c]=fv;}else{const h=Math.floor(sz/2);for(let dr=0;dr<sz;dr++) for(let dc=0;dc<sz;dc++){const nr=r-h+dr,nc=c-h+dc;if(nr>=0&&nr<rows&&nc>=0&&nc<cols&&grid[nr][nc]!=='blocked')grid[nr][nc]=fv;}}}else if(mode==='blocked'){if(!isBlockCell(r,c)&&grid[r][c]!=='blocked'){grid[r][c]='blocked';justPlacedBlockedUntil=Date.now()+300;}}renderAll();}
+function placeBlock(r,c){const isBase=mode==='block90',cells=isBase?BASE_CELLS:getObjSize();const{tr,tc}=blockTopLeft(r,c,cells);if(canPlace(tr,tc,cells)){const blk={id:++idCounter,r:tr,c:tc,cells,color:isBase?getBaseColor():getObjColor(),barrier:isBase&&document.getElementById('barrier-check').checked,type:isBase?'base':'obj'};if(isBase){const colorKey=getBaseColorKey();blk.colorKey=colorKey;blk.allianceName=getCurrentAllianceName();const role=document.getElementById('base-role').value;if(BASE_ROLES.includes(role)){blk.role=role;blk.textLabel={txt:role,sz:14,col:'#000000',bg:'#ffffff'};}}blocks.push(blk);saveHistory();setStatus((isBase?'基地':'オブジェクト')+'を配置しました');renderAll();}else setStatus('ここには置けません');}
 function removeBlock(id){blocks=blocks.filter(b=>b.id!==id);bindSelected.delete(id);saveHistory();renderAll();setStatus('削除しました');}
 function startDragMouse(e,blk){dragBlock=blk;const{px,py}=getXY(e);const{r,c}=cellAt(px,py);dragOffR=r-blk.r;dragOffC=c-blk.c;dragPreviewR=blk.r;dragPreviewC=blk.c;function onMove(ev){const{px:x,py:y}=getXY(ev);const{r:cr,c:cc}=cellAt(x,y);dragPreviewR=cr-dragOffR;dragPreviewC=cc-dragOffC;renderAll();}function onUp(){finishDrag();document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);renderAll();}
 function startDragTouch(e,blk){dragBlock=blk;const t=e.touches[0];const rect=document.getElementById('grid-wrap').getBoundingClientRect();const px=(t.clientX-rect.left)/scale,py=(t.clientY-rect.top)/scale;const{r,c}=cellAt(px,py);dragOffR=r-blk.r;dragOffC=c-blk.c;dragPreviewR=blk.r;dragPreviewC=blk.c;function onMove(ev){if(isMultiTouch)return;ev.preventDefault();const t2=ev.touches[0];const rect2=document.getElementById('grid-wrap').getBoundingClientRect();const px2=(t2.clientX-rect2.left)/scale,py2=(t2.clientY-rect2.top)/scale;const{r:cr,c:cc}=cellAt(px2,py2);dragPreviewR=cr-dragOffR;dragPreviewC=cc-dragOffC;renderAll();}function onUp(){finishDrag();document.removeEventListener('touchmove',onMove);document.removeEventListener('touchend',onUp);}document.addEventListener('touchmove',onMove,{passive:false});document.addEventListener('touchend',onUp);renderAll();}
 function finishDrag(){if(canPlace(dragPreviewR,dragPreviewC,dragBlock.cells,dragBlock.id)){dragBlock.r=dragPreviewR;dragBlock.c=dragPreviewC;saveHistory();setStatus('移動しました');}else setStatus('そこには置けません');dragBlock=null;dragPreviewR=-1;dragPreviewC=-1;renderAll();}
-function onTouchStart(e){if(isMultiTouch)return;e.preventDefault();const t=e.touches[0];touchStartClientX=t.clientX;touchStartClientY=t.clientY;const rect=document.getElementById('grid-wrap').getBoundingClientRect();const px=(t.clientX-rect.left)/scale,py=(t.clientY-rect.top)/scale;const{r,c}=clampRC(...Object.values(cellAt(px,py)));touchStartPos={r,c,px,py};touchMoved=false;if(mode==='eraser'){previewR=r;previewC=c;renderAll();return;}if(mode==='textbox'){if(IS_TOUCH){if(selectedTbId){previewR=r;previewC=c;return;}const ex_=document.getElementById('tb-editor-overlay');if(ex_)document.body.removeChild(ex_);tbNewDrag=true;tbNewStart={r,c};previewR=r;previewC=c;return;}if(selectedTbId){selectedTbId=null;renderAll();return;}const ex=document.getElementById('tb-editor-overlay');if(ex)document.body.removeChild(ex);tbNewDrag=true;tbNewStart={r,c};previewR=r;previewC=c;return;}if(mode==='move'){isPanning=true;panStartX=t.clientX;panStartY=t.clientY;const ga=document.getElementById('grid-area');panScrollX=ga.scrollLeft;panScrollY=ga.scrollTop;}else if(isRelocating){relocateAnchorR=r;relocateAnchorC=c;}else if(mode==='blockind'){const _bindBlk=blockAtCell(r,c);if(_bindBlk&&(_bindBlk.type==='base'||_bindBlk.type==='obj')){longPressTimer=setTimeout(()=>{if(!touchMoved)onBindBlockRightClick(_bindBlk);},600);}}else if(mode==='select'){selDragStart={r,c};selDragging=true;}else if(mode==='block90'||mode==='objblock'){}else if(mode==='blocked'){}else{longPressTimer=setTimeout(()=>{if(!touchMoved)doRightAction(r,c);},600);isDrawing=true;doPaintLeft(r,c);}previewR=r;previewC=c;renderAll();}
-function onTouchMove(e){if(isMultiTouch)return;e.preventDefault();touchMoved=true;clearTimeout(longPressTimer);const t=e.touches[0];if(isPanning){const ga=document.getElementById('grid-area');ga.scrollLeft=panScrollX-(t.clientX-panStartX);ga.scrollTop=panScrollY-(t.clientY-panStartY);return;}const rect=document.getElementById('grid-wrap').getBoundingClientRect();const px=(t.clientX-rect.left)/scale,py=(t.clientY-rect.top)/scale;const{r,c}=clampRC(...Object.values(cellAt(px,py)));previewR=r;previewC=c;if(mode==='eraser'){renderAll();return;}if(mode==='textbox'&&tbNewDrag){renderAll();return;}if(isRelocating){relocateAnchorR=r;relocateAnchorC=c;renderAll();return;}if(arrangeActive&&arrangeDragging){arrangeAnchorR=r;arrangeAnchorC=c;renderAll();return;}if(selDragging){renderAll();return;}if((mode==='_paste'||isMovingSel)&&clipboard){pastePreviewR=r;pastePreviewC=c;renderAll();return;}if(isDrawing&&['contaminated','effectother'].includes(mode))doPaintLeft(r,c);if(mode==='blocked'){if(!isBlockCell(r,c)&&grid[r][c]!=='blocked')grid[r][c]='blocked';}renderAll();}
-function onTouchEnd(e){if(isMultiTouch)return;e.preventDefault();clearTimeout(longPressTimer);if(IS_TOUCH&&mode==='textbox'&&selectedTbId&&!tbNewDrag&&isTapEnd(e)&&touchStartPos){const stb=textboxes.find(t=>t.id===selectedTbId);if(stb){const MARGIN=2;const pr=touchStartPos.r,pc=touchStartPos.c;const outside=pr<stb.r-MARGIN||pr>stb.r+stb.h-1+MARGIN||pc<stb.c-MARGIN||pc>stb.c+stb.w-1+MARGIN;if(outside){selectedTbId=null;touchStartPos=null;previewR=-1;previewC=-1;renderAll();return;}}}if(mode==='textbox'&&tbNewDrag&&tbNewStart){tbNewDrag=false;if(isTapEnd(e)){tbNewStart=null;previewR=-1;previewC=-1;renderAll();return;}const r1=Math.min(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c1=Math.min(tbNewStart.c,previewC>=0?previewC:tbNewStart.c),r2=Math.max(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c2=Math.max(tbNewStart.c,previewC>=0?previewC:tbNewStart.c);if(!canPlaceTb(r1,c1,r2,c2)){tbNewStart=null;previewR=-1;previewC=-1;setStatus('他のテキストボックスの2マス以内には設置できません');renderAll();return;}const p=getTbParams();const tb={id:++tbIdCounter,r:r1,c:c1,w:c2-c1+1,h:r2-r1+1,...p,text:''};textboxes.push(tb);selectedTbId=tb.id;tbNewStart=null;previewR=-1;previewC=-1;saveHistory();renderAll();setStatus('テキストボックスを追加しました');return;}if(isRelocating&&touchStartPos&&isTapEnd(e)){applyRelocate(touchStartPos.r,touchStartPos.c);return;}if(arrangeDragging){arrangeDragging=false;applyArrange(arrangeAnchorR,arrangeAnchorC);return;}if(selDragging&&selDragStart){selDragging=false;addRectToSel(selDragStart.r,selDragStart.c,previewR,previewC);selDragStart=null;if(selCells.size>0){selActive=true;showSelActions();}renderAll();return;}isDrawing=false;isPanning=false;const wasTap=isTapEnd(e);if(wasTap&&mode==='eraser'&&touchStartPos){doErase(touchStartPos.r,touchStartPos.c,touchStartPos.px,touchStartPos.py);touchStartPos=null;previewR=-1;previewC=-1;return;}if(wasTap&&(mode==='block90'||mode==='objblock')&&touchStartPos){const cells=mode==='block90'?BASE_CELLS:getObjSize();const{tr,tc}=blockTopLeft(touchStartPos.r,touchStartPos.c,cells);if(mobilePreviewR===tr&&mobilePreviewC===tc){placeBlock(touchStartPos.r,touchStartPos.c);clearMobilePreview();}else{mobilePreviewR=tr;mobilePreviewC=tc;setStatus(canPlace(tr,tc,cells)?'もう一度同じ位置をタップして設置':'ここには置けません');renderAll();}touchStartPos=null;previewR=-1;previewC=-1;return;}if(wasTap&&mode==='blocked'&&touchStartPos){const r=touchStartPos.r,c=touchStartPos.c;if(isBlockCell(r,c)){setStatus('ブロック上には設置不可');}else if(grid[r][c]==='blocked'){grid[r][c]='floor';saveHistory();setStatus('設置不可エリアを消去しました');}else{grid[r][c]='blocked';saveHistory();setStatus('設置不可エリアを設置しました');}renderAll();touchStartPos=null;previewR=-1;previewC=-1;return;}if(wasTap&&(mode==='_paste'||isMovingSel)&&touchStartPos){if(isMovingSel)applyMoveSelection(touchStartPos.r,touchStartPos.c);else applyPaste(touchStartPos.r,touchStartPos.c);}if(wasTap&&mode==='blockind'&&touchStartPos){const _blk=blockAtCell(touchStartPos.r,touchStartPos.c);touchStartPos=null;previewR=-1;previewC=-1;if(_blk&&(_blk.type==='base'||_blk.type==='obj'))onBindBlockClick(_blk);else renderAll();return;}touchStartPos=null;previewR=-1;previewC=-1;renderAll();}
+function onTouchStart(e){if(isMultiTouch)return;e.preventDefault();const t=e.touches[0];touchStartClientX=t.clientX;touchStartClientY=t.clientY;const rect=document.getElementById('grid-wrap').getBoundingClientRect();const px=(t.clientX-rect.left)/scale,py=(t.clientY-rect.top)/scale;const{r,c}=clampRC(...Object.values(cellAt(px,py)));touchStartPos={r,c,px,py};touchMoved=false;if(mode==='eraser'){previewR=r;previewC=c;renderAll();return;}
+if(arrangeActive){
+  if(IS_TOUCH){
+    /* モバイル: 1回タップでプレビュー、同じマスを再タップで設置 */
+    arrangeAnchorR=r;arrangeAnchorC=c;
+    previewR=r;previewC=c;
+    renderAll();return;
+  }
+  arrangeDragging=true;
+  arrangeAnchorR=r;
+  arrangeAnchorC=c;
+  previewR=r;
+  previewC=c;
+  renderAll();
+  return;
+}
+if(mode==='textbox'){
+  if(IS_TOUCH){
+    if(selectedTbId){previewR=r;previewC=c;return;}
+    // FIX-1: 選択解除直後の1タップは、新規テキストボックス作成として扱わない
+    if(ignoreNextTextboxCreate){
+      ignoreNextTextboxCreate=false;
+      tbNewDrag=false;
+      tbNewStart=null;
+      previewR=-1;
+      previewC=-1;
+      renderAll();
+      return;
+    }
+    const ex_=document.getElementById('tb-editor-overlay');
+    if(ex_)document.body.removeChild(ex_);
+    tbNewDrag=true;
+    tbNewStart={r,c};
+    previewR=r;
+    previewC=c;
+    return;
+  }
+  if(selectedTbId){
+    selectedTbId=null;
+    ignoreNextTextboxCreate=true;
+    tbNewDrag=false;
+    tbNewStart=null;
+    renderAll();
+    return;
+  }
+  if(ignoreNextTextboxCreate){
+    ignoreNextTextboxCreate=false;
+    tbNewDrag=false;
+    tbNewStart=null;
+    previewR=-1;
+    previewC=-1;
+    renderAll();
+    return;
+  }
+  const ex=document.getElementById('tb-editor-overlay');
+  if(ex)document.body.removeChild(ex);
+  tbNewDrag=true;
+  tbNewStart={r,c};
+  previewR=r;
+  previewC=c;
+  return;
+}if(mode==='move'){isPanning=true;panStartX=t.clientX;panStartY=t.clientY;const ga=document.getElementById('grid-area');panScrollX=ga.scrollLeft;panScrollY=ga.scrollTop;}else if(isRelocating){relocateAnchorR=r;relocateAnchorC=c;}else if(mode==='blockind'){const _bindBlk=blockAtCell(r,c);if(_bindBlk&&(_bindBlk.type==='base'||_bindBlk.type==='obj')){longPressTimer=setTimeout(()=>{if(!touchMoved)onBindBlockRightClick(_bindBlk);},600);}}else if(mode==='select'){selDragStart={r,c};selDragging=true;}else if(mode==='block90'||mode==='objblock'){}else if(mode==='blocked'){}else{longPressTimer=setTimeout(()=>{if(!touchMoved)doRightAction(r,c);},600);isDrawing=true;doPaintLeft(r,c);}previewR=r;previewC=c;renderAll();}
+function onTouchMove(e){if(isMultiTouch)return;e.preventDefault();touchMoved=true;clearTimeout(longPressTimer);const t=e.touches[0];if(isPanning){const ga=document.getElementById('grid-area');ga.scrollLeft=panScrollX-(t.clientX-panStartX);ga.scrollTop=panScrollY-(t.clientY-panStartY);return;}const rect=document.getElementById('grid-wrap').getBoundingClientRect();const px=(t.clientX-rect.left)/scale,py=(t.clientY-rect.top)/scale;const{r,c}=clampRC(...Object.values(cellAt(px,py)));previewR=r;previewC=c;if(mode==='eraser'){renderAll();return;}if(mode==='textbox'&&tbNewDrag){renderAll();return;}if(isRelocating){relocateAnchorR=r;relocateAnchorC=c;renderAll();return;}if(arrangeActive){if(!IS_TOUCH&&arrangeDragging){arrangeAnchorR=r;arrangeAnchorC=c;}renderAll();return;}if(selDragging){renderAll();return;}if((mode==='_paste'||isMovingSel)&&clipboard){pastePreviewR=r;pastePreviewC=c;renderAll();return;}if(isDrawing&&['contaminated','effectother'].includes(mode))doPaintLeft(r,c);if(mode==='blocked'){if(!isBlockCell(r,c)&&grid[r][c]!=='blocked'){grid[r][c]='blocked';justPlacedBlockedUntil=Date.now()+300;}}renderAll();}
+function onTouchEnd(e){if(isMultiTouch)return;e.preventDefault();clearTimeout(longPressTimer);if(IS_TOUCH&&mode==='textbox'&&selectedTbId&&!tbNewDrag&&isTapEnd(e)&&touchStartPos){const stb=textboxes.find(t=>t.id===selectedTbId);if(stb){const MARGIN=2;const pr=touchStartPos.r,pc=touchStartPos.c;const outside=pr<stb.r-MARGIN||pr>stb.r+stb.h-1+MARGIN||pc<stb.c-MARGIN||pc>stb.c+stb.w-1+MARGIN;if(outside){
+      selectedTbId=null;
+      // FIX-1: この選択解除タップの次のタップを新規作成にしない
+      ignoreNextTextboxCreate=true;
+      tbNewDrag=false;
+      tbNewStart=null;
+      touchStartPos=null;
+      previewR=-1;
+      previewC=-1;
+      renderAll();
+      return;
+    }}}if(mode==='textbox'&&tbNewDrag&&tbNewStart){tbNewDrag=false;if(isTapEnd(e)){tbNewStart=null;previewR=-1;previewC=-1;renderAll();return;}const r1=Math.min(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c1=Math.min(tbNewStart.c,previewC>=0?previewC:tbNewStart.c),r2=Math.max(tbNewStart.r,previewR>=0?previewR:tbNewStart.r),c2=Math.max(tbNewStart.c,previewC>=0?previewC:tbNewStart.c);if(!canPlaceTb(r1,c1,r2,c2)){tbNewStart=null;previewR=-1;previewC=-1;setStatus('他のテキストボックスの2マス以内には設置できません');renderAll();return;}const p=getTbParams();const tb={id:++tbIdCounter,r:r1,c:c1,w:c2-c1+1,h:r2-r1+1,...p,text:''};textboxes.push(tb);selectedTbId=tb.id;tbNewStart=null;previewR=-1;previewC=-1;saveHistory();renderAll();setStatus('テキストボックスを追加しました');return;}if(isRelocating&&touchStartPos&&isTapEnd(e)){applyRelocate(touchStartPos.r,touchStartPos.c);return;}if(arrangeDragging){arrangeDragging=false;applyArrange(arrangeAnchorR,arrangeAnchorC);return;}if(selDragging&&selDragStart){selDragging=false;addRectToSel(selDragStart.r,selDragStart.c,previewR,previewC);selDragStart=null;if(selCells.size>0){selActive=true;showSelActions();}renderAll();return;}isDrawing=false;isPanning=false;const wasTap=isTapEnd(e);if(wasTap&&mode==='eraser'&&touchStartPos){doErase(touchStartPos.r,touchStartPos.c,touchStartPos.px,touchStartPos.py);touchStartPos=null;previewR=-1;previewC=-1;return;}if(wasTap&&(mode==='block90'||mode==='objblock')&&touchStartPos){const cells=mode==='block90'?BASE_CELLS:getObjSize();const{tr,tc}=blockTopLeft(touchStartPos.r,touchStartPos.c,cells);if(mobilePreviewR===tr&&mobilePreviewC===tc){placeBlock(touchStartPos.r,touchStartPos.c);clearMobilePreview();}else{mobilePreviewR=tr;mobilePreviewC=tc;setStatus(canPlace(tr,tc,cells)?'もう一度同じ位置をタップして設置':'ここには置けません');renderAll();}touchStartPos=null;previewR=-1;previewC=-1;return;}if(wasTap&&mode==='blocked'&&touchStartPos){
+  const r=touchStartPos.r,c=touchStartPos.c;
+  if(isBlockCell(r,c)){
+    setStatus('ブロック上には設置不可');
+  }else{
+    // FIX-3: 配置モード中のタップでは消去しない。既存blockedをタップしても維持する。
+    grid[r][c]='blocked';
+    justPlacedBlockedUntil=Date.now()+300;
+    saveHistory();
+    setStatus('設置不可エリアを設置しました');
+  }
+  renderAll();
+  touchStartPos=null;
+  previewR=-1;
+  previewC=-1;
+  return;
+}if(wasTap&&(mode==='_paste'||isMovingSel)&&touchStartPos){if(isMovingSel)applyMoveSelection(touchStartPos.r,touchStartPos.c);else applyPaste(touchStartPos.r,touchStartPos.c);}if(wasTap&&mode==='blockind'&&touchStartPos){const _blk=blockAtCell(touchStartPos.r,touchStartPos.c);touchStartPos=null;previewR=-1;previewC=-1;if(_blk&&(_blk.type==='base'||_blk.type==='obj'))onBindBlockClick(_blk);else renderAll();return;}touchStartPos=null;previewR=-1;previewC=-1;renderAll();}
 // ピンチ/2本指パン: スケール範囲 0.5〜1
 (function(){
   const ga=document.getElementById('grid-area');
-  ga.addEventListener('touchstart',function(e){if(e.touches.length>=2){if(tbPinching){e.preventDefault();e.stopPropagation();return;}e.preventDefault();e.stopPropagation();isMultiTouch=true;isDrawing=false;isPanning=false;tbNewDrag=false;tbNewStart=null;clearTimeout(longPressTimer);clearMobilePreview();const t1=e.touches[0],t2=e.touches[1];pinchStartDist=touchDist(t1,t2);pinchStartScale=scale;pinchPanStart=touchMid(t1,t2);pinchScrollStart={x:ga.scrollLeft,y:ga.scrollTop};}},{passive:false,capture:true});
-  ga.addEventListener('touchmove',function(e){if(tbPinching){e.preventDefault();e.stopPropagation();return;}if(isMultiTouch&&e.touches.length>=2){e.preventDefault();e.stopPropagation();const t1=e.touches[0],t2=e.touches[1];const dist=touchDist(t1,t2);const ns=clampScale(pinchStartScale*(dist/pinchStartDist));if(ns!==scale)applyScale(ns);const mid=touchMid(t1,t2);ga.scrollLeft=pinchScrollStart.x-(mid.x-pinchPanStart.x);ga.scrollTop=pinchScrollStart.y-(mid.y-pinchPanStart.y);}},{passive:false,capture:true});
+  ga.addEventListener('touchstart',function(e){if(e.touches.length>=2){
+    // FIX-1: テキストボックス選択・ピンチ中はマップ側ズームを開始しない
+    if(tbPinching||selectedTbId){e.preventDefault();e.stopPropagation();return;}
+    e.preventDefault();e.stopPropagation();isMultiTouch=true;isDrawing=false;isPanning=false;tbNewDrag=false;tbNewStart=null;clearTimeout(longPressTimer);clearMobilePreview();const t1=e.touches[0],t2=e.touches[1];pinchStartDist=touchDist(t1,t2);pinchStartScale=scale;pinchPanStart=touchMid(t1,t2);pinchScrollStart={x:ga.scrollLeft,y:ga.scrollTop};}},{passive:false,capture:true});
+  ga.addEventListener('touchmove',function(e){if(tbPinching||selectedTbId){e.preventDefault();e.stopPropagation();return;}if(isMultiTouch&&e.touches.length>=2){e.preventDefault();e.stopPropagation();const t1=e.touches[0],t2=e.touches[1];const dist=touchDist(t1,t2);const ns=clampScale(pinchStartScale*(dist/pinchStartDist));if(ns!==scale)applyScale(ns);const mid=touchMid(t1,t2);ga.scrollLeft=pinchScrollStart.x-(mid.x-pinchPanStart.x);ga.scrollTop=pinchScrollStart.y-(mid.y-pinchPanStart.y);}},{passive:false,capture:true});
   ga.addEventListener('touchend',function(e){if(e.touches.length===0){isMultiTouch=false;dragBlock=null;dragPreviewR=-1;dragPreviewC=-1;}},{passive:true,capture:true});
   ga.addEventListener('touchcancel',function(){isMultiTouch=false;dragBlock=null;dragPreviewR=-1;dragPreviewC=-1;},{passive:true,capture:true});
 })();
@@ -516,10 +810,16 @@ document.getElementById('grid-area').addEventListener('wheel',e=>{
   applyScale(scale-(e.deltaY>0?SCALE_STEP:-SCALE_STEP));
 },{passive:false});
 document.addEventListener('mouseup',()=>{if(!dragBlock){isDrawing=false;isPanning=false;}});
+document.addEventListener('mousedown',e=>{if(e.button!==0)return;if(e.target?.closest?.('.tb-handle'))return;if(startTbMoveDrag(e.clientX,e.clientY)){e.preventDefault();e.stopPropagation();}},{capture:true});
+document.addEventListener('mousemove',e=>{if(tbMoveDragState){e.preventDefault();moveTbDrag(e.clientX,e.clientY);}},{capture:true});
+document.addEventListener('mouseup',()=>{endTbMoveDrag();},{capture:true});
+document.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;if(e.target?.closest?.('.tb-handle'))return;const t=e.touches[0];if(startTbMoveDrag(t.clientX,t.clientY)){e.preventDefault();e.stopPropagation();}},{passive:false,capture:true});
+document.addEventListener('touchmove',e=>{if(!tbMoveDragState||e.touches.length!==1)return;const t=e.touches[0];e.preventDefault();e.stopPropagation();moveTbDrag(t.clientX,t.clientY);},{passive:false,capture:true});
+document.addEventListener('touchend',()=>{endTbMoveDrag();},{capture:true});
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();e.shiftKey?redo():undo();}if((e.ctrlKey||e.metaKey)&&e.key==='y'){e.preventDefault();redo();}if((e.ctrlKey||e.metaKey)&&e.key==='c'&&selActive)copySelection();if((e.ctrlKey||e.metaKey)&&e.key==='v'&&clipboard)pasteSelection();if(e.key==='Escape'){clearMobilePreview();clearSelection();cancelArrange();cancelRelocate();const ex=document.getElementById('tb-editor-overlay');if(ex)document.body.removeChild(ex);const ex2=document.getElementById('tb-editor-backdrop');if(ex2)document.body.removeChild(ex2);tbNewDrag=false;tbNewStart=null;selectedTbId=null;if(mode==='_paste'){mode='select';}renderAll();}if(e.key==='Delete'&&selectedTbId&&document.activeElement===document.body)deleteSelectedTb();});
 function exportSelectionPNG(){const s=selBBox();if(!s){setStatus('範囲が選択されていません');return;}const sw=s.c2-s.c1+1,sh=s.r2-s.r1+1;const canvas=document.createElement('canvas');canvas.width=sw*CELL;canvas.height=sh*CELL;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,sw*CELL,sh*CELL);selCells.forEach(k=>{const[r,c]=k.split(',').map(Number);const t=grid[r][c];const cx=(c-s.c1)*CELL,cy=(r-s.r1)*CELL;if(t==='blocked'){ctx.fillStyle='#888';ctx.fillRect(cx,cy,CELL,CELL);}else if(t==='contaminated'&&effectVisible)canvasDrawContam(ctx,cx,cy,CELL,CELL);else if(isEffectOtherTile(t)&&effectVisible)canvasDrawEO(ctx,cx,cy,CELL,CELL,effectOtherTileColor(t));});if(regionVisible){selCells.forEach(k=>{const[r,c]=k.split(',').map(Number);const cell=regionGrid[r][c];if(!cell)return;ctx.fillStyle=hexAlpha(cell.hex,cell.alpha);ctx.fillRect((c-s.c1)*CELL,(r-s.r1)*CELL,CELL,CELL);});}ctx.strokeStyle='#e0e0e0';ctx.lineWidth=1;for(let c=0;c<=sw;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,sh*CELL);ctx.stroke();}for(let r=0;r<=sh;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(sw*CELL,r*CELL);ctx.stroke();}ctx.save();ctx.translate(-s.c1*CELL,-s.r1*CELL);getSelBlocks().forEach(blk=>drawBlockOnCanvas(ctx,blk));ctx.restore();canvas.toBlob(blob=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='map_sel.png';a.click();setStatus('部分PNGを保存しました');});}
 function resize(){cols=Math.min(75,Math.max(3,readIntField('cols-in',30)));rows=Math.min(75,Math.max(3,readIntField('rows-in',30)));document.getElementById('cols-in').value=cols;document.getElementById('rows-in').value=rows;clearMobilePreview();const og=grid.map(r=>[...r]);const or2=regionGrid.map(r=>[...r]);grid=Array.from({length:rows},(_,r)=>Array.from({length:cols},(_,c)=>(og[r]&&og[r][c])||'floor'));regionGrid=Array.from({length:rows},(_,r)=>Array.from({length:cols},(_,c)=>(or2[r]&&or2[r][c])||null));blocks=blocks.filter(b=>b.r+b.cells<=rows&&b.c+b.cells<=cols);textboxes=textboxes.filter(t=>t.r<rows&&t.c<cols);clearSelection();saveHistory();renderAll();setStatus('マス数を変更しました');}
 function clearAll(){clearMobilePreview();initGrid();clearSelection();cancelArrange();cancelRelocate();bindSelected=new Set();textboxes=[];selectedTbId=null;renderAll();setStatus('クリアしました');}
-function setStatus(msg){document.getElementById('status').textContent=msg;setTimeout(()=>document.getElementById('status').textContent='',5000);}
-initGrid();renderPalette();document.getElementById('base-sub').style.display='flex';renderAll();
+function setStatus(msg){document.getElementById('status').textContent=msg;refreshLegendPanel();setTimeout(()=>document.getElementById('status').textContent='',5000);}
+initGrid();renderPalette();document.getElementById('base-sub').style.display='flex';syncBaseUI();renderAll();refreshLegendPanel();
 </script>
