@@ -1,4 +1,5 @@
-ver 3.3617
+
+ver 3.3620
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- =========================
@@ -128,7 +129,7 @@ body,#app{font-family:var(--font-sans);background:#fff}
     <button onclick="clearAll()">クリア</button>
   </div>
   <div class="row subpanel" id="base-sub">
-    <select id="base-color" onchange="syncBaseUI()"><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black" selected>黒</option><option value="custom">その他...</option></select>
+    <select id="base-color" onchange="syncBaseUI()"><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="cyan">水色</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black" selected>黒</option><option value="custom">その他...</option></select>
     <input type="color" id="base-custom" value="#3a7bd5" style="display:none">
     <input type="text" id="alliance-name" placeholder="Alliance name (EN)" style="padding:4px 8px;font-size:11px;border-radius:var(--border-radius-md);border:.5px solid var(--color-border-secondary);width:160px">
     <button onclick="applyAllianceName()">連盟名を保存</button>
@@ -138,10 +139,10 @@ body,#app{font-family:var(--font-sans);background:#fff}
   </div>
   <div class="row" id="arr-panel">
     <span style="font-size:11px;font-weight:500;color:#1e40af">整列配置:</span>
-    <span style="font-size:11px">行</span><input type="number" id="arr-rows" min="1" max="100" value="3" style="width:44px">
-    <span style="font-size:11px">列</span><input type="number" id="arr-cols" min="1" max="100" value="3" style="width:44px">
-    <span style="font-size:11px">間隔行</span><input type="number" id="arr-gap-r" min="0" max="10" value="1" style="width:36px">
-    <span style="font-size:11px">列</span><input type="number" id="arr-gap-c" min="0" max="10" value="1" style="width:36px">
+    <span style="font-size:11px">行</span><select id="arr-rows" style="width:52px"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
+    <span style="font-size:11px">列</span><select id="arr-cols" style="width:52px"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option></select>
+    <span style="font-size:11px">間隔行</span><select id="arr-gap-r" style="width:44px"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select>
+    <span style="font-size:11px">列</span><select id="arr-gap-c" style="width:44px"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option></select>
     <select id="arr-color" onchange="syncArrColorUI()"><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black" selected>黒</option><option value="custom">その他...</option></select>
     <input type="color" id="arr-custom" value="#3a7bd5" style="display:none">
     <label><input type="checkbox" id="arr-barrier"> バリア</label>
@@ -192,7 +193,7 @@ body,#app{font-family:var(--font-sans);background:#fff}
   <div class="row subpanel" id="block-ind-sub">
     <span style="font-size:11px;font-weight:500;color:#065f46" id="block-ind-count">0個選択中</span>
     <span style="font-size:11px;color:#999">クリック:選択/解除 | 右クリック:再配置</span>
-    <select id="bind-color" onchange="applyBindColor()"><option value="">色変更...</option><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black">黒</option><option value="green">緑</option><option value="orange">オレンジ</option><option value="custom">その他...</option></select>
+    <select id="bind-color" onchange="applyBindColor()"><option value="">色変更...</option><option value="blue">青</option><option value="purple">紫</option><option value="red">赤</option><option value="cyan">水色</option><option value="pink">ピンク</option><option value="yellow">黄色</option><option value="gray">灰色</option><option value="black">黒</option><option value="green">緑</option><option value="orange">オレンジ</option><option value="custom">その他...</option></select>
     <input type="color" id="bind-color-custom" value="#3a7bd5" style="display:none" onchange="applyBindColorCustom()">
     <label><input type="checkbox" id="bind-barrier" onchange="applyBindBarrier()"> バリア</label>
     <select id="bind-role"><option value="">役割なし</option><option value="盟主">盟主</option><option value="戦神">戦神</option><option value="女神">女神</option><option value="執事">執事</option><option value="理事">理事</option></select>
@@ -291,7 +292,7 @@ const CELL=30,BASE_CELLS=3,TAP_DIST=12;
 const IS_TOUCH=navigator.maxTouchPoints>0||'ontouchstart' in window;
 // ズーム範囲: PC=0.5〜1、モバイル=0.8〜2.0
 const SCALE_MIN=IS_TOUCH?0.6:0.5,SCALE_MAX=IS_TOUCH?1.5:1.0,SCALE_STEP=0.05;
-const BASE_COLORS={blue:'#1a6fd4',purple:'#7c3aed',red:'#dc2626',pink:'#db2777',yellow:'#d97706',gray:'#6b7280',black:'#111111'};
+const BASE_COLORS={blue:'#02ADFF',purple:'#BD55CF',red:'#F33237',cyan:'#55FDE5',pink:'#FF9C84',yellow:'#FFE400',gray:'#AFAFAE',black:'#111111'};
 const BASE_ROLES=['盟主','戦神','女神','執事','理事'];
 const OBJ_COLORS={green:'#22aa44',orange:'#f97316',red:'#dc2626',brown:'#92400e',beige:'#d4b483',black:'#111111'};
 const EFFECT_OTHER_COLORS={red:'#ef4444',blue:'#3b82f6',black:'#111111'};
@@ -323,7 +324,7 @@ let pinchPanStart={x:0,y:0},pinchScrollStart={x:0,y:0};
 let mobilePreviewR=-1,mobilePreviewC=-1;
 let legendVisible=true;
 let tbMoveDragState=null;
-const allianceNameMap={blue:'Blue Alliance',purple:'Purple Alliance',red:'Red Alliance',pink:'Pink Alliance',yellow:'Yellow Alliance',gray:'Gray Alliance',black:'Black Alliance'};
+const allianceNameMap={blue:'Blue Alliance',purple:'Purple Alliance',red:'Red Alliance',cyan:'Cyan Alliance',pink:'Pink Alliance',yellow:'Yellow Alliance',gray:'Gray Alliance',black:'Black Alliance'};
 
 /* --- <script> タグ内の冒頭、変数定義の後あたりに追加 --- */
 
@@ -371,7 +372,7 @@ function getContSize(){const v=document.getElementById('cont-size').value;return
 function getEffectOtherSize(){return readIntField('effectother-size',1);}
 function getEffectOtherColor(){const v=document.getElementById('effectother-color').value;return v==='custom'?document.getElementById('effectother-custom').value:EFFECT_OTHER_COLORS[v]||'#ef4444';}
 function getArrColor(){const v=document.getElementById('arr-color').value;return v==='custom'?document.getElementById('arr-custom').value:BASE_COLORS[v]||'#111';}
-function getArrParams(){return{nrows:Math.min(100,Math.max(1,readIntField('arr-rows',3))),ncols:Math.min(100,Math.max(1,readIntField('arr-cols',3))),gapR:Math.min(10,Math.max(0,readIntField('arr-gap-r',1))),gapC:Math.min(10,Math.max(0,readIntField('arr-gap-c',1))),color:getArrColor(),barrier:document.getElementById('arr-barrier').checked};}
+function getArrParams(){return{nrows:parseInt(document.getElementById('arr-rows').value)||3,ncols:parseInt(document.getElementById('arr-cols').value)||3,gapR:parseInt(document.getElementById('arr-gap-r').value)||0,gapC:parseInt(document.getElementById('arr-gap-c').value)||0,color:getArrColor(),barrier:document.getElementById('arr-barrier').checked};}
 function syncBaseUI(){const key=document.getElementById('base-color').value;document.getElementById('base-custom').style.display=key==='custom'?'inline-block':'none';document.getElementById('alliance-name').value=getCurrentAllianceName();renderPalette();refreshLegendPanel();}
 function applyAllianceName(){const key=getBaseColorKey();const input=document.getElementById('alliance-name');const val=(input.value||'').trim();if(!val){setStatus('連盟名(英語)を入力してください');return;}if(key==='custom'){const hex=document.getElementById('base-custom').value.toLowerCase();allianceNameMap[hex]=val;}else allianceNameMap[key]=val;refreshLegendPanel();setStatus('連盟名を保存しました');}
 function toggleLegend(){legendVisible=!legendVisible;const btn=document.getElementById('btn-legend-toggle');if(btn)btn.textContent=`凡例: ${legendVisible?'ON':'OFF'}`;refreshLegendPanel();}
