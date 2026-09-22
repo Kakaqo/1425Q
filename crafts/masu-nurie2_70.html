@@ -5,13 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
 <title>Chloeditor Mk.2</title>
  <!--  
-  ver2.7(09/21)
   大きな更新：全マップ補完、画像サイズの適正化、塗りを二値化、ページ閉じると情報失われる問題と枠外が塗られる不具合の修正。
-  大きな更新その２(ver2～)：保護期間・宣戦可能までの時間の情報追加、高度な保存(連結トリミング)、英語とインドネシア語に対応(言語切替フォーマット作成)、バグ修正と色関係の調整
-  大きな修正：マップ切り替え操作でLocal Storage保存のデータが失われるバグ、高度な保存でプレビューにマップ情報が反映されないバグ、英語のエスケープ処理不十分などなど
-  更新予定：編集済み全マップのcsv出力と入力。高度な設定、メモ機能、各マスのデフォルト文字列周りのクリック判定修正、韓国語・中国語対応。
-  更新検討：ダークモード、くろえさんに関するイースターエッグ
-  動作確認済み：windows11 Firefox, Chrome とか色々。大規模アプデ後確認不足。
+  更新予定：英語版とインドネシア語版追加。（切替式）　文字背景の縮小。編集済み全マップのcsv出力と入力。
+  更新未定：リセット時の挙動修正、各マスのデフォルト文字列周りのクリック判定修正
+  更新検討：保護期間、タイムスタンプ、くろえさんに関するイースターエッグ
+  動作確認済み：windows11 Firefox, Chrome とか色々。iOSはまだなのであとでまた確認。
   -->
 <style>
   :root{
@@ -637,7 +635,6 @@
   const legendHeadingEl = document.getElementById('legendHeading');
   const showLabelsTextEl = document.getElementById('showLabelsText');
   const hintTextEl = document.getElementById('hintText');
-
   // ---- Language switching (UI text only) ----
   // "en" and "id" are placeholders for now: their text is still Japanese,
   // exactly matching "ja", until real translations are written in.
@@ -897,6 +894,7 @@
   let undoStack = [];
   const MAX_UNDO = 30;
   const CITY_AREA_THRESHOLD = 3500; // px count above this = "city" (square), else "bank"
+  const MIN_REGION_SIZE = 150; // reject any found region smaller than this - real cells (even the smallest "bank") are always well above this; anything smaller is a false match like the hole inside a letter such as O/P/6/9/0/8
   const BG_BRIGHTNESS_MIN = 235; // a base-image pixel is "fillable background" if its avg brightness is >= this; below = wall/ink (line or printed text), fixed & binary - no partial/tolerance blending. Raised from 200 so the #d3d3d3 (avg ~211) grid lines still count as walls.
 
   let showLabels = true;
@@ -1028,13 +1026,13 @@
   function computeRegionNear(startX, startY, maxRadius){
     maxRadius = maxRadius || 10;
     const direct = computeRegion(startX, startY);
-    if(direct) return direct;
+    if(direct && direct.count >= MIN_REGION_SIZE) return direct;
     for(let radius=1; radius<=maxRadius; radius++){
       for(let dy=-radius; dy<=radius; dy++){
         for(let dx=-radius; dx<=radius; dx++){
           if(Math.max(Math.abs(dx),Math.abs(dy)) !== radius) continue; // only the outer ring of this radius
           const region = computeRegion(startX+dx, startY+dy);
-          if(region) return region;
+          if(region && region.count >= MIN_REGION_SIZE) return region;
         }
       }
     }
@@ -1463,6 +1461,7 @@
 
     const region = computeRegion(x, y);
     if(!region) return; // clicked on a grid line or printed character - ignore
+    if(region.count < MIN_REGION_SIZE) return; // too small to be a real cell (e.g. inside the hole of a letter like O/P/6/9/0/8) - ignore
 
     const key = regionKey(region);
 
@@ -1692,13 +1691,13 @@
   function computeRegionOnDataNear(data, w, h, startX, startY, maxRadius){
     maxRadius = maxRadius || 10;
     const direct = computeRegionOnData(data, w, h, startX, startY);
-    if(direct) return direct;
+    if(direct && direct.count >= MIN_REGION_SIZE) return direct;
     for(let radius=1; radius<=maxRadius; radius++){
       for(let dy=-radius; dy<=radius; dy++){
         for(let dx=-radius; dx<=radius; dx++){
           if(Math.max(Math.abs(dx),Math.abs(dy)) !== radius) continue;
           const region = computeRegionOnData(data, w, h, startX+dx, startY+dy);
-          if(region) return region;
+          if(region && region.count >= MIN_REGION_SIZE) return region;
         }
       }
     }
