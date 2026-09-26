@@ -297,8 +297,9 @@
     cursor:pointer;
   }
   .tab-btn.active{
-    color:var(--ink);
-    background:var(--panel);
+    color:#ffffff;
+    background:#4b5563;
+    border-color:#4b5563;
     box-shadow: inset 0 2px 0 var(--accent);
   }
   .remaining-selects{
@@ -488,7 +489,7 @@
   <button class="action" id="ioBtn">入出力</button>
   <button class="action" id="undoBtn">元に戻す</button>
   <button class="action danger" id="resetBtn">リセット</button>
-  <button class="action" id="advSaveBtn">高度な保存</button>
+  <button class="action" id="advSaveBtn">詳細設定</button>
   <button class="action primary" id="saveBtn">保存</button>
 </div>
 
@@ -499,10 +500,16 @@
   <div class="io-actions">
     <button class="action primary" id="ioApplyBtn">反映</button>
   </div>
+  <p class="io-desc" id="csvDescText">全てのマップのデータをまとめてCSVファイルとして書き出したり、CSVファイルから読み込んだりできます。</p>
+  <div class="io-actions">
+    <button class="action" id="csvExportBtn">CSVへの出力</button>
+    <button class="action" id="csvOpenBtn">ファイルを開く</button>
+    <input type="file" id="csvFileInput" accept=".csv" style="display:none">
+  </div>
 </div>
 
 <div class="io-panel" id="advSavePanel" style="display:none;">
-  <h2 id="advSaveHeading">高度な保存</h2>
+  <h2 id="advSaveHeading">詳細設定</h2>
   <p class="io-desc" id="advSaveDescText">保存したいマップを選ぶと、隣接するマップが追加候補として選べるようになります。隣り合うマップをまとめて1枚の画像として保存できます。プレビューを見ながら保存範囲をトリミングできます。</p>
 
   <div class="compass-grid" id="compassGrid"></div>
@@ -515,7 +522,7 @@
 
   <div class="io-actions">
     <button class="action" id="advCancelBtn">キャンセル</button>
-    <button class="action primary" id="advDownloadBtn">この範囲でダウンロード</button>
+    <button class="action" id="advRefreshBtn">更新</button>
   </div>
 </div>
 
@@ -523,12 +530,16 @@
   <div class="tab-bar" id="tabBar">
     <button type="button" class="tab-btn active" id="tabOccupationBtn">占領</button>
     <button type="button" class="tab-btn" id="tabRemainingBtn">残り時間</button>
+    <button type="button" class="tab-btn" id="tabInfoBtn">使い方・その他</button>
   </div>
-  <div class="board-wrap">
+  <div class="board-wrap" id="boardWrap">
     <div class="canvas-stack" id="canvasStack">
       <canvas id="board"></canvas>
       <canvas id="overlay"></canvas>
     </div>
+  </div>
+  <div class="legend-wrap" id="infoWrap" style="display:none;">
+    <p class="io-desc" id="infoBodyText">テキスト本文</p>
   </div>
   <div class="legend-wrap" id="remainingWrap" style="display:none;">
     <div class="legend-head">
@@ -563,7 +574,7 @@
   <div class="legend-wrap" id="tipsText">
    Tips:マップ内の都市について<br>"TP":交易地(TradingPost) "WO":戦域前哨基地(WarzoneOutpost)　中央マップのみ各都市は金晶石鉱山となっている</br>
   </div>
-  <div class="legend-wrap">
+  <div class="legend-wrap" id="legendMainWrap">
     <div class="legend-head">
       <h2 id="legendHeading">凡例（連盟名など）</h2>
       <label class="show-labels-toggle">
@@ -634,6 +645,10 @@
   const ioPanel = document.getElementById('ioPanel');
   const ioText = document.getElementById('ioText');
   const ioApplyBtn = document.getElementById('ioApplyBtn');
+  const csvDescTextEl = document.getElementById('csvDescText');
+  const csvExportBtn = document.getElementById('csvExportBtn');
+  const csvOpenBtn = document.getElementById('csvOpenBtn');
+  const csvFileInput = document.getElementById('csvFileInput');
 
   const advSaveBtn = document.getElementById('advSaveBtn');
   const advSavePanel = document.getElementById('advSavePanel');
@@ -645,12 +660,17 @@
   const advCropOverlay = document.getElementById('advCropOverlay');
   const advPreviewHintEl = document.getElementById('advPreviewHint');
   const advCancelBtn = document.getElementById('advCancelBtn');
-  const advDownloadBtn = document.getElementById('advDownloadBtn');
+  const advRefreshBtn = document.getElementById('advRefreshBtn');
   const timestampChk = document.getElementById('timestampChk');
   const timestampTextEl = document.getElementById('timestampText');
 
   const tabOccupationBtn = document.getElementById('tabOccupationBtn');
   const tabRemainingBtn = document.getElementById('tabRemainingBtn');
+  const tabInfoBtn = document.getElementById('tabInfoBtn');
+  const boardWrap = document.getElementById('boardWrap');
+  const infoWrap = document.getElementById('infoWrap');
+  const infoBodyTextEl = document.getElementById('infoBodyText');
+  const legendMainWrap = document.getElementById('legendMainWrap');
   const remainingWrap = document.getElementById('remainingWrap');
   const remainingHeadingEl = document.getElementById('remainingHeading');
   const bakeRemainingChk = document.getElementById('bakeRemainingChk');
@@ -686,11 +706,13 @@
   // exactly matching "ja", until real translations are written in.
   const JA_TEXT = {
     appTitle: 'Chloeditor Mk.2',
-    descText: '<br>色を選んでマスをクリック(タップ)すると塗られ、塗られたマスをもう一度タップすると色が消える。上部一番左のプルダウンで表示するマップを切り替える。<br>編集内容はマップごとにブラウザのLocalStorageへ自動保存されるが、操作するごとに保存されるわけではないので常用は推奨しない。</br>「入出力」で表示されるテキスト欄から現在開いているマップの編集状況ををテキスト形式でコピーできる。同じ書式でペーストして「反映」で復元される。',
+    descText:'上部一番左のプルダウンで表示するマップを切り替える。<br>編集内容はマップごとにブラウザのLocalStorageへ自動保存されるが、コードでの出力や画像保存をこまめに行うことを強く推奨する。</br>「入出力」で表示されるテキスト欄から現在開いているマップの編集状況ををテキスト形式でコピーできる。同じ書式でペーストして「適用する」で復元される。',
     mapLabel: 'マップの戦域区画',
     colorLabel: '色',
     tabOccupation: '占領',
     tabRemaining: '残り時間',
+    tabInfo: '使い方・その他',
+    infoBodyText: 'テキスト本文',
     remainingHeading: '残り時間の設定',
     remainingDescText: '銀行または都市の保護期間や宣戦可能になるまでの時間を設定します',
     bakeRemainingText: '保存画像に反映させる',
@@ -703,13 +725,13 @@
     includeLegendText: '凡例を保存画像に含める',
     remainingHint: '塗られているマスをタップすると、そのマスの残り時間を設定できます。',
     remClearBtn: 'クリア',
-    remSetBtn: '設定',
-    advSaveBtn: '高度な保存',
-    advSaveHeading: '高度な保存',
-    advSaveDescText: '保存したいマップを選ぶと、隣接するマップが追加候補として選べるようになります。隣り合うマップをまとめて1枚の画像として保存できます。プレビューを見ながら保存範囲をトリミングできます。',
+    remSetBtn: '適用する',
+    advSaveBtn: '詳細設定',
+    advSaveHeading: '詳細設定',
+    advSaveDescText: '保存したいマップを選ぶと、隣接するマップが追加候補として選べるようになります。隣り合うマップをまとめて1枚の画像として保存できます。プレビューを見ながら保存範囲をトリミングできます。この画面を開いている間は「保存」ボタンで、統合・トリミングした画像を保存します。',
     advPreviewHint: 'マップを1つ以上選択するとプレビューが表示されます。',
     advCancelBtn: 'キャンセル',
-    advDownloadBtn: 'この範囲でダウンロード',
+    advRefreshBtn: '更新',
     ioBtn: '入出力',
     undoBtn: '元に戻す',
     resetBtn: 'リセット',
@@ -743,13 +765,149 @@
     resetConfirm: function(mapKey){ return 'この「' + (this.mapDirectionLabels[mapKey]||mapKey) + '」マップの塗り色と凡例を消して元に戻しますか?'; },
     invalidJsonAlert: 'テキストの形式が正しくありません(JSONとして読み取れませんでした)。',
     invalidRegionsAlert: 'テキストの形式が正しくありません(regionsの配列が見つかりません)。',
-    applyFailAlert: function(failCount){ return failCount + '件のマスを反映できませんでした。'; }
+    applyFailAlert: function(failCount){ return failCount + '件のマスを反映できませんでした。'; },
+    csvDescText: '全てのマップのデータをまとめてCSVファイルとして書き出したり、CSVファイルから読み込んだりできます。',
+    csvExportBtn: 'CSVへの出力',
+    csvOpenBtn: 'ファイルを開く',
+    csvInvalidAlert: 'CSVの形式が正しくありません(見出し行にtype列・color列が必要です)。',
+    csvEmptyAlert: 'CSVの中に読み込めるデータが見つかりませんでした。',
+    csvReadErrorAlert: 'ファイルの読み込みに失敗しました。',
+    csvImportSuccessAlert: 'CSVの内容をすべて反映しました。'
   };
-
+ // 英語版。↑必ず日本語版編集完了後に差分更新。（手動）アポストロフィは絶対に使うな。
+  const EN_TEXT = {
+  appTitle: 'Chloeditor Mk.2',
+    descText: 'Change WARZONE from pull down menu.<br>You can automatically backup summary of changes in your Local Storage but I recommend that you frequently use "I/O"(TEXT code) or "Save"(image) for your backup.</br>Use "I/O" for making output text data which can copy & paste for backup. Push the button "Apply" to reflect your data in the map.',
+    mapLabel: 'WARZONE Area',
+    colorLabel: 'color',
+    tabOccupation: 'Occupation',
+    tabRemaining: 'Time left',
+    tabInfo: '使い方・その他',
+    infoBodyText: 'テキスト本文',
+    remainingHeading: 'Time left settings',
+    remainingDescText: 'Set the time to beacome able to capture banks or cities.',
+    bakeRemainingText: 'Apply in the output image',
+    labelBgModeText: '文字の背景',
+    labelBgModeWhiteOpt: '白',
+    labelBgModeCellOpt: 'マスの色',
+    remBgModeText: '文字の背景',
+    remBgModeWhiteOpt: '白',
+    remBgModeCellOpt: 'マスの色',
+    includeLegendText: '凡例を保存画像に含める',
+    remainingHint: 'Select colored square and set time left of the city or bank...',
+    remClearBtn: 'Clear',
+    remSetBtn: 'Apply',
+    advSaveBtn: 'Advance Save',
+    advSaveHeading: '！※This is β※！',
+    advSaveDescText: 'You can save some maps next to each other as one image and can trim the range of saving image with preview.',
+    advPreviewHint: 'The preview will be displayed when you select any maps. Drag the corner of preview when you trim.',
+    advCancelBtn: 'Cancel',
+    advDownloadBtn: 'Save trimed image',
+    ioBtn: 'I/O',
+    undoBtn: 'Undo',
+    resetBtn: 'Reset',
+    saveBtn: 'Save',
+    ioHeading: 'Input & Output',
+    ioDesc: '<br>You can describe displayed map as TEXT data. Copy it for backup and paste for restoring.</br><br><font color="red">When you edit the map with displaying this text I/O form, please reopen this form and be sure to reflect new information of the map.</font> Paste TEXT in this form and push "Apply" if you want to use the edited map data.</br><strong><font color="red">This TEXT code reflects only the map which displays now.</strong></font>',
+    ioApplyBtn: 'Apply',
+    tipsText: 'Tips:About some exceptional squares<br>"TP":TradingPost "WO":WarzoneOutpost　Cities are "CrystalGold Mine" only in the Central area.',
+    legendHeading: 'Legend (Alliance)',
+    showLabelsText: 'Display texts in the map',
+    timestampText: 'Write down current time in the save image',
+    legendEmpty: 'No squares is colored. Used color will be displayed when you select and color it.',
+    hintText: 'ver2.70　Updated on November 21 　© Command Q',
+    notRegisteredSuffix: '(No registered)',
+    mapDirectionLabels: {
+      '無地': 'Plain',
+      '北': 'N',
+      '北西': 'NW',
+      '北東': 'NE',
+      '西': 'W',
+      '東': 'E',
+      '南西': 'SW',
+      '南': 'S',
+      '南東': 'SE',
+      '中央': 'Center'
+    },
+    legendNamePlaceholder: 'alliance name',
+    legendCounts: function(city, bank){ return 'Bank ' + city + ' ・ City ' + bank; },
+    mapNotRegisteredAlert: function(key){ return '「' + (this.mapDirectionLabels[key]||key) + '」has not been registerd yet. '; },
+    restoreFailAlert: function(failCount){ return 'In the map already saved,' + failCount + ' squares cannot be restored. The map could be updated.;['; },
+    resetConfirm: function(mapKey){ return 'Are you sure you want to clear this MAP「' + (this.mapDirectionLabels[mapKey]||mapKey) + '」? If you reset, current editing map data is lost and cannot be restored by using "Undo".'; },
+    invalidJsonAlert: 'The format of TEXT data you input is not correct. That TEXT code cannot be read as JSON.',
+    invalidRegionsAlert: 'The fomat of TEXT data you input is notcorrect. "regions" is not found.',
+    applyFailAlert: function(failCount){ return failCount + 'squares cannot be reflected.'; }
+  };
+  
+  //インドネシア語版。更新手順は英語版と同じ。DeepL使用。
+    const ID_TEXT = {
+    appTitle: 'Chloeditor Mk.2',
+    descText: 'Ubah WARZONE dari menu tarik-turun.<br>Anda dapat secara otomatis mencadangkan ringkasan perubahan di Penyimpanan Lokal Anda, tetapi saya menyarankan agar Anda sering menggunakan “I/O” (kode TEKS) atau ‘Save’ (gambar) untuk pencadangan Anda.</br>Gunakan “I/O” untuk menghasilkan data teks yang dapat disalin dan ditempelkan sebagai cadangan. Tekan tombol “terapkan” untuk menerapkan data Anda ke dalam peta.',
+    mapLabel: 'WARZONE kawasan',
+    colorLabel: 'warna',
+    tabOccupation: 'Pendudukan',
+    tabRemaining: 'Sisa waktu',
+    tabInfo: '使い方・その他',
+    infoBodyText: 'テキスト本文',
+    remainingHeading: 'Pengaturan sisa waktu',
+    remainingDescText: 'Tentukan waktunya agar bisa merebut bank atau kota',
+    bakeRemainingText: 'Terapkan pada gambar',
+        labelBgModeText: '文字の背景',
+    labelBgModeWhiteOpt: '白',
+    labelBgModeCellOpt: 'マスの色',
+    remBgModeText: '文字の背景',
+    remBgModeWhiteOpt: '白',
+    remBgModeCellOpt: 'マスの色',
+    includeLegendText: '凡例を保存画像に含める',
+    remainingHint: 'Pilih petak berwarna tersebut dan atur sisa waktu untuk kota atau bank tersebut.',
+    remClearBtn: 'membersihkan',
+    remSetBtn: 'terapkan',
+    advSaveBtn: 'Advance Save',
+    advSaveHeading: '※　Masih dalam tahap pengembangan　※',
+    advSaveDescText: 'Anda dapat menyimpan beberapa peta yang berdekatan sebagai satu gambar dan dapat memotong area gambar yang akan disimpan dengan menggunakan pratinjau.',
+    advPreviewHint: 'Pratinjau akan ditampilkan saat Anda memilih peta apa pun. Seret sudut pratinjau saat Anda memotong.',
+    advCancelBtn: 'batal',
+    advDownloadBtn: 'save',
+    ioBtn: 'I/O',
+    undoBtn: 'batalkan',
+    resetBtn: 'reset',
+    saveBtn: 'save',
+    ioHeading: 'input dan output',
+    ioDesc: '<br>Anda dapat menggambarkan peta yang ditampilkan sebagai data TEKS. Salinlah untuk cadangan dan tempelkan untuk memulihkannya.</br><br><font color="red">Saat Anda mengedit peta dengan menampilkan formulir I/O teks ini, silakan buka kembali formulir ini dan pastikan informasi baru pada peta telah diperbarui.</font> Tempelkan TEKS di formulir ini dan klik “Terapkan” jika Anda ingin menggunakan data peta yang telah diedit.</br><strong><font color="red">Kode TEXT ini hanya mencerminkan peta yang sedang ditampilkan saat ini.</strong></font>',
+    ioApplyBtn: 'terapkan',
+    tipsText: 'Tips:Tentang beberapa petak<br>"TP":Pos Perdagangan(TradingPost) "WO":WarzoneOutpost　Kota-kota hanya menjadi "Tambang Kristal" di wilayah Tengah.',
+    legendHeading: 'Legenda (nama Aliansi)',
+    showLabelsText: 'menampilkan teks di peta',
+    timestampText: 'tuliskan waktu saat ini pada gambar yang disimpan',
+    legendEmpty: 'Tidak ada petak yang diwarnai. Warna yang digunakan akan ditampilkan saat Anda memilih dan mewarnainya.',
+    hintText: 'ver2.70　Updated on November 21 　© Command Q',
+    notRegisteredSuffix: '(No registered)',
+    mapDirectionLabels: {
+      '無地': 'polos',
+      '北': 'N',
+      '北西': 'NW',
+      '北東': 'NE',
+      '西': 'W',
+      '東': 'E',
+      '南西': 'SW',
+      '南': 'S',
+      '南東': 'SE',
+      '中央': 'tengah'
+    },
+    legendNamePlaceholder: 'nama',
+    legendCounts: function(city, bank){ return 'bank ' + city + ' ・ kota ' + bank; },
+    mapNotRegisteredAlert: function(key){ return '「' + (this.mapDirectionLabels[key]||key) + '」の画像はまだ登録されていません。画像を追加してもらえれば、この方角でも切り替えられるようになります。'; },
+    restoreFailAlert: function(failCount){ return 'Pada peta yang sudah disimpan, ada ' + failCount + ' petak yang tidak dapat dipulihkan. Peta tersebut mungkin telah diperbarui.'; },
+    resetConfirm: function(mapKey){ return 'Apakah Anda yakin ingin menghapus MAP ini? ' + (this.mapDirectionLabels[mapKey]||mapKey) + ' Jika Anda melakukan reset, data peta yang sedang Anda edit akan hilang dan tidak dapat dipulihkan menggunakan fungsi “batalkan”.'; },
+    invalidJsonAlert: 'Format data TEXT yang Anda masukkan tidak benar. Kode TEXT tersebut tidak dapat dibaca sebagai JSON.',
+    invalidRegionsAlert: 'Format data TEXT yang Anda masukkan tidak benar. “regions” tidak ditemukan.',
+    applyFailAlert: function(failCount){ return failCount + 'petak tidak dapat ditampilkan'; }
+  };
+  
   const I18N = {
     ja: JA_TEXT,
-    en: Object.assign({}, JA_TEXT, { mapDirectionLabels: Object.assign({}, JA_TEXT.mapDirectionLabels) }),
-    id: Object.assign({}, JA_TEXT, { mapDirectionLabels: Object.assign({}, JA_TEXT.mapDirectionLabels) })
+    en: EN_TEXT,
+    id: ID_TEXT
   };
 
   let currentLang = 'ja';
@@ -765,6 +923,8 @@
     if(colorLabelTextEl) colorLabelTextEl.textContent = t.colorLabel;
     if(tabOccupationBtn) tabOccupationBtn.textContent = t.tabOccupation;
     if(tabRemainingBtn) tabRemainingBtn.textContent = t.tabRemaining;
+    if(tabInfoBtn) tabInfoBtn.textContent = t.tabInfo;
+    if(infoBodyTextEl) infoBodyTextEl.textContent = t.infoBodyText;
     if(remainingHeadingEl) remainingHeadingEl.textContent = t.remainingHeading;
     if(remainingDescTextEl) remainingDescTextEl.textContent = t.remainingDescText;
     if(bakeRemainingTextEl) bakeRemainingTextEl.textContent = t.bakeRemainingText;
@@ -783,7 +943,7 @@
     if(advSaveDescTextEl) advSaveDescTextEl.textContent = t.advSaveDescText;
     if(advPreviewHintEl) advPreviewHintEl.textContent = t.advPreviewHint;
     if(advCancelBtn) advCancelBtn.textContent = t.advCancelBtn;
-    if(advDownloadBtn) advDownloadBtn.textContent = t.advDownloadBtn;
+    if(advRefreshBtn) advRefreshBtn.textContent = t.advRefreshBtn;
     if(ioBtn) ioBtn.textContent = t.ioBtn;
     if(undoBtn) undoBtn.textContent = t.undoBtn;
     if(resetBtn) resetBtn.textContent = t.resetBtn;
@@ -791,6 +951,9 @@
     if(ioHeadingEl) ioHeadingEl.textContent = t.ioHeading;
     if(ioDescTextEl) ioDescTextEl.innerHTML = t.ioDesc;
     if(ioApplyBtn) ioApplyBtn.textContent = t.ioApplyBtn;
+    if(csvDescTextEl) csvDescTextEl.textContent = t.csvDescText;
+    if(csvExportBtn) csvExportBtn.textContent = t.csvExportBtn;
+    if(csvOpenBtn) csvOpenBtn.textContent = t.csvOpenBtn;
     if(tipsTextEl) tipsTextEl.innerHTML = t.tipsText;
     if(legendHeadingEl) legendHeadingEl.textContent = t.legendHeading;
     if(showLabelsTextEl) showLabelsTextEl.textContent = t.showLabelsText;
@@ -1419,17 +1582,26 @@
     currentTab = tab;
     tabOccupationBtn.classList.toggle('active', tab === 'occupation');
     tabRemainingBtn.classList.toggle('active', tab === 'remaining');
+    tabInfoBtn.classList.toggle('active', tab === 'info');
     remainingWrap.style.display = tab === 'remaining' ? 'block' : 'none';
     if(tab !== 'remaining'){
       selectedRegionKey = null;
       remainingEditor.style.display = 'none';
       remainingHintEl.style.display = 'block';
     }
+
+    const isInfo = tab === 'info';
+    boardWrap.style.display = isInfo ? 'none' : '';
+    tipsTextEl.style.display = isInfo ? 'none' : '';
+    legendMainWrap.style.display = isInfo ? 'none' : '';
+    infoWrap.style.display = isInfo ? 'block' : 'none';
+
     renderOverlay();
   }
 
   tabOccupationBtn.addEventListener('click', function(){ setTab('occupation'); });
   tabRemainingBtn.addEventListener('click', function(){ setTab('remaining'); });
+  tabInfoBtn.addEventListener('click', function(){ setTab('info'); });
 
   remSetBtn.addEventListener('click', function(){
     if(!selectedRegionKey) return;
@@ -1635,6 +1807,12 @@
     return fc;
   }
 
+  function formatFilenameTimestamp(){
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    return now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+  }
+
   function stampTimestampIfNeeded(ctx, canvasWidth, canvasHeight){
     if(!(timestampChk && timestampChk.checked)) return;
     const now = new Date();
@@ -1662,7 +1840,7 @@
     ctx.fillText(ts, bx+padX, by+boxH/2+1);
   }
 
-  saveBtn.addEventListener('click', function(){
+  function saveSingleMap(){
     const combined = document.createElement('canvas');
     combined.width = board.width;
     combined.height = board.height;
@@ -1679,9 +1857,38 @@
     const finalCanvas = addLegendBarIfNeeded(combined);
 
     const link = document.createElement('a');
-    link.download = 'map-nurie.png';
+    link.download = 'chloe_map.png';
     link.href = finalCanvas.toDataURL('image/png');
     link.click();
+  }
+
+  function saveAdvancedCombined(){
+    if(!advCombinedCanvas || !advCropRect) return;
+    const { x, y, w, h } = advCropRect;
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(w));
+    out.height = Math.max(1, Math.round(h));
+    const octx3 = out.getContext('2d');
+    octx3.drawImage(advCombinedCanvas, x, y, w, h, 0, 0, out.width, out.height);
+
+    stampTimestampIfNeeded(octx3, out.width, out.height);
+
+    const entries = computeLegendEntriesForKeys(Array.from(advSelected));
+    const finalOut = addLegendBarIfNeeded(out, entries);
+
+    const link = document.createElement('a');
+    link.download = 'chloe_map_ex.png';
+    link.href = finalOut.toDataURL('image/png');
+    link.click();
+  }
+
+  saveBtn.addEventListener('click', function(){
+    const advOpen = advSavePanel && advSavePanel.style.display !== 'none';
+    if(advOpen){
+      saveAdvancedCombined();
+    } else {
+      saveSingleMap();
+    }
   });
 
   // ---- Advanced Save (高度な保存): combine adjacent maps into one image, with crop ----
@@ -2080,6 +2287,11 @@
   advCropOverlay.addEventListener('pointercancel', endCropDrag);
 
   advSaveBtn.addEventListener('click', function(){
+    const isOpen = advSavePanel.style.display !== 'none';
+    if(isOpen){
+      advSavePanel.style.display = 'none';
+      return;
+    }
     advSelected = new Set();
     if(COMPASS_POS[currentMapKey]) advSelected.add(currentMapKey);
     advCombinedCanvas = null;
@@ -2093,24 +2305,8 @@
     advSavePanel.style.display = 'none';
   });
 
-  advDownloadBtn.addEventListener('click', function(){
-    if(!advCombinedCanvas || !advCropRect) return;
-    const { x, y, w, h } = advCropRect;
-    const out = document.createElement('canvas');
-    out.width = Math.max(1, Math.round(w));
-    out.height = Math.max(1, Math.round(h));
-    const octx3 = out.getContext('2d');
-    octx3.drawImage(advCombinedCanvas, x, y, w, h, 0, 0, out.width, out.height);
-
-    stampTimestampIfNeeded(octx3, out.width, out.height);
-
-    const entries = computeLegendEntriesForKeys(Array.from(advSelected));
-    const finalOut = addLegendBarIfNeeded(out, entries);
-
-    const link = document.createElement('a');
-    link.download = 'map-nurie-combined.png';
-    link.href = finalOut.toDataURL('image/png');
-    link.click();
+  advRefreshBtn.addEventListener('click', function(){
+    refreshAdvPreview();
   });
 
   showLabelsChk.addEventListener('change', function(){
@@ -2204,6 +2400,210 @@
 
   ioApplyBtn.addEventListener('click', function(){
     applyState(ioText.value);
+  });
+
+  // ---- CSV import/export: ALL maps' data at once (unlike the JSON text box above,
+  // which is always scoped to the currently displayed map only) ----
+
+  function csvEscape(v){
+    const s = (v===null || v===undefined) ? '' : String(v);
+    if(/[",\r\n]/.test(s)){
+      return '"' + s.replace(/"/g,'""') + '"';
+    }
+    return s;
+  }
+
+  function parseCsv(text){
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+    for(let i=0; i<text.length; i++){
+      const c = text[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(text[i+1] === '"'){ field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else {
+        if(c === '"'){ inQuotes = true; }
+        else if(c === ','){ row.push(field); field = ''; }
+        else if(c === '\r'){ /* skip, \n (or a lone \r) ends the row */ }
+        else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+        else { field += c; }
+      }
+    }
+    if(field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+    return rows.filter(r => !(r.length === 1 && r[0] === ''));
+  }
+
+  const CSV_HEADER = ['type','map','cx','cy','color','remaining','remainingColor','remainingBgMode','name','textColor'];
+
+  function exportAllStateCsv(){
+    saveState(); // make sure mapRegionsStore[currentMapKey] reflects the live, on-screen edits
+    const rows = [CSV_HEADER];
+    Object.keys(mapRegionsStore).forEach(mapKey=>{
+      (mapRegionsStore[mapKey] || []).forEach(r=>{
+        rows.push(['region', mapKey, r.cx, r.cy, r.color,
+          (typeof r.remaining === 'number') ? r.remaining : '',
+          r.remainingColor || '', r.remainingBgMode || '', '', '']);
+      });
+    });
+    const colorKeys = new Set([...Object.keys(labels), ...Object.keys(textColors)]);
+    colorKeys.forEach(color=>{
+      rows.push(['label', '', '', '', color, '', '', '', labels[color] || '', textColors[color] || '']);
+    });
+    return rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+  }
+
+  // Validates/repaints a saved cx,cy,color list against a map that ISN'T the one currently
+  // on screen, using the same off-DOM pixel lookup the "詳細設定" snapshot renderer uses,
+  // so importing doesn't require switching through every map one by one.
+  async function validateRegionsForMap(mapKey, rawRegions){
+    const src = MAP_IMAGES[mapKey];
+    if(!src) return { valid: [], failCount: rawRegions.length };
+    const img = await loadImageAsync(src);
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0,0,w,h).data;
+    const valid = [];
+    let failCount = 0;
+    rawRegions.forEach(r=>{
+      const region = computeRegionOnDataNear(data, w, h, Math.round(r.cx), Math.round(r.cy));
+      if(region){
+        valid.push({
+          cx: Math.round(region.cx*100)/100,
+          cy: Math.round(region.cy*100)/100,
+          color: r.color,
+          remaining: (typeof r.remaining === 'number') ? r.remaining : null,
+          remainingColor: r.remainingColor || null,
+          remainingBgMode: r.remainingBgMode || null
+        });
+      } else {
+        failCount++;
+      }
+    });
+    return { valid, failCount };
+  }
+
+  async function importAllStateFromCsv(text){
+    const rows = parseCsv(text);
+    if(rows.length < 1){
+      alert(I18N[currentLang].csvInvalidAlert);
+      return;
+    }
+    const header = rows[0].map(h => (h||'').trim());
+    const idx = name => header.indexOf(name);
+    const iType = idx('type'), iMap = idx('map'), iCx = idx('cx'), iCy = idx('cy'),
+          iColor = idx('color'), iRemaining = idx('remaining'), iRemColor = idx('remainingColor'),
+          iRemBg = idx('remainingBgMode'), iName = idx('name'), iTextColor = idx('textColor');
+    if(iType < 0 || iColor < 0){
+      alert(I18N[currentLang].csvInvalidAlert);
+      return;
+    }
+
+    const regionsByMap = {};
+    const newLabels = {};
+    const newTextColors = {};
+
+    for(let i=1; i<rows.length; i++){
+      const row = rows[i];
+      if(!row || row.every(c => c === '')) continue;
+      const type = (row[iType] || '').trim();
+      if(type === 'region'){
+        const mapKey = (iMap>=0 ? (row[iMap]||'') : '').trim();
+        const cx = parseFloat(iCx>=0 ? row[iCx] : '');
+        const cy = parseFloat(iCy>=0 ? row[iCy] : '');
+        const color = (row[iColor] || '').trim();
+        if(!mapKey || !MAP_IMAGES[mapKey] || !isFinite(cx) || !isFinite(cy) || !color) continue;
+        const remRaw = (iRemaining>=0 ? (row[iRemaining]||'').trim() : '');
+        const remaining = remRaw === '' ? null : parseFloat(remRaw);
+        const remainingColor = (iRemColor>=0 ? (row[iRemColor]||'').trim() : '') || null;
+        const remainingBgMode = (iRemBg>=0 ? (row[iRemBg]||'').trim() : '') || null;
+        if(!regionsByMap[mapKey]) regionsByMap[mapKey] = [];
+        regionsByMap[mapKey].push({
+          cx, cy, color,
+          remaining: (remaining !== null && isFinite(remaining)) ? remaining : null,
+          remainingColor, remainingBgMode
+        });
+      } else if(type === 'label'){
+        const color = (row[iColor] || '').trim();
+        if(!color) continue;
+        const name = (iName>=0 ? (row[iName]||'') : '');
+        const textColor = (iTextColor>=0 ? (row[iTextColor]||'').trim() : '');
+        if(name) newLabels[color] = name;
+        if(textColor) newTextColors[color] = textColor;
+      }
+    }
+
+    const mapKeysFound = Object.keys(regionsByMap);
+    if(mapKeysFound.length === 0 && Object.keys(newLabels).length === 0 && Object.keys(newTextColors).length === 0){
+      alert(I18N[currentLang].csvEmptyAlert);
+      return;
+    }
+
+    let totalFail = 0;
+
+    for(const mapKey of mapKeysFound){
+      if(mapKey === currentMapKey) continue; // handled below, against the live canvas
+      const { valid, failCount } = await validateRegionsForMap(mapKey, regionsByMap[mapKey]);
+      mapRegionsStore[mapKey] = valid;
+      totalFail += failCount;
+    }
+
+    labels = newLabels;
+    textColors = newTextColors;
+
+    if(regionsByMap[currentMapKey]){
+      pushUndo();
+      totalFail += replayRegions(regionsByMap[currentMapKey]);
+    }
+
+    updateLegend();
+    renderOverlay();
+    saveState();
+
+    if(totalFail > 0){
+      alert(I18N[currentLang].applyFailAlert(totalFail));
+    } else {
+      alert(I18N[currentLang].csvImportSuccessAlert);
+    }
+  }
+
+  csvExportBtn.addEventListener('click', function(){
+    const csv = exportAllStateCsv();
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'chloeditor2_data_' + formatFilenameTimestamp() + '.csv';
+    link.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  });
+
+  csvOpenBtn.addEventListener('click', function(){
+    csvFileInput.value = '';
+    csvFileInput.click();
+  });
+
+  csvFileInput.addEventListener('change', function(){
+    const file = csvFileInput.files && csvFileInput.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(){
+      let text = String(reader.result || '');
+      if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      importAllStateFromCsv(text);
+    };
+    reader.onerror = function(){
+      alert(I18N[currentLang].csvReadErrorAlert);
+    };
+    reader.readAsText(file, 'utf-8');
   });
 
   applyLanguage('ja');
